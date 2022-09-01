@@ -60,6 +60,8 @@ type LinkTraceRedis struct {
 // Trace recorded parameters
 type Trace struct {
 	mux                sync.Mutex
+	ServiceName        string             `json:"service_name"`
+	ServiceType        string             `json:"service_type"`
 	TraceId            string             `json:"trace_id"`
 	Request            *LinkTraceRequest  `json:"request"`
 	Response           *LinkTraceResponse `json:"response"`
@@ -152,6 +154,8 @@ type Hook interface {
 type GinTrace struct {
 	LogFileName   string
 	LogRecordMode string
+	serviceName   string
+	serviceType   string
 	Func          func(*Trace)
 	trace         *Trace
 	hook          Hook
@@ -175,66 +179,78 @@ func (g *GinTrace) SetRecordMode(mode string) {
 	g.LogRecordMode = mode
 }
 
+func (g *GinTrace) SetServiceName(name string) {
+	g.serviceName = name
+}
+
+func (g *GinTrace) SetServiceType(t string) {
+	g.serviceType = t
+}
+
 func (g *GinTrace) AddHook(hook Hook) {
 	g.hook = hook
 }
 
-func (g *GinTrace) TraceHandler(c *gin.Context) {
-	writer := responseWriter{
-		c.Writer,
-		bytes.NewBuffer([]byte{}),
-	}
-	c.Writer = writer
-	traceId := c.GetHeader("TRACE-ID")
-	if len(traceId) == 0 {
-		traceId = uuid.New().String()
-	}
+func (g *GinTrace) TraceHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		writer := responseWriter{
+			c.Writer,
+			bytes.NewBuffer([]byte{}),
+		}
+		c.Writer = writer
+		traceId := c.GetHeader("TRACE-ID")
+		if len(traceId) == 0 {
+			traceId = uuid.New().String()
+		}
 
-	t := time.Now()
-	trace := &Trace{
-		TraceId: traceId,
-		Start:   t.Unix(),
-	}
-	g.trace = trace
-	g.hook.BeforeProcess(trace)
-	c.Set(trackCtxName, trace)
+		t := time.Now()
+		trace := &Trace{
+			TraceId:     traceId,
+			Start:       t.Unix(),
+			ServiceName: g.serviceName,
+			ServiceType: g.serviceType,
+		}
+		g.trace = trace
+		g.hook.BeforeProcess(trace)
+		c.Set(trackCtxName, trace)
 
-	c.Next()
+		c.Next()
 
-	trace.Response = &LinkTraceResponse{
-		Header:   writer.Header(),
-		Body:     writer.b.String(),
-		HttpCode: writer.Status(),
-	}
-	trace.Request = &LinkTraceRequest{
-		Method: c.Request.Method,
-		Url:    c.Request.URL.String(),
-		Header: c.Request.Header,
-		Body:   c.Request.Body,
-	}
-	if writer.Status() == http.StatusOK {
-		trace.Success = true
-	}
+		trace.Response = &LinkTraceResponse{
+			Header:   writer.Header(),
+			Body:     writer.b.String(),
+			HttpCode: writer.Status(),
+		}
+		trace.Request = &LinkTraceRequest{
+			Method: c.Request.Method,
+			Url:    c.Request.URL.String(),
+			Header: c.Request.Header,
+			Body:   c.Request.Body,
+		}
+		if writer.Status() == http.StatusOK {
+			trace.Success = true
+		}
 
-	trace.End = time.Now().Unix()
-	trace.Cost = time.Since(t).String()
-	str, err := json.Marshal(&trace)
-	if err != nil {
-		Error("link trace json marshal error:" + err.Error())
-		return
-	}
+		trace.End = time.Now().Unix()
+		trace.Cost = time.Since(t).String()
+		str, err := json.Marshal(&trace)
+		if err != nil {
+			Error("link trace json marshal error:" + err.Error())
+			return
+		}
 
-	g.hook.AfterProcess(trace)
+		g.hook.AfterProcess(trace)
 
-	if g.LogFileName == "" {
-		return
-	}
-	switch g.LogRecordMode {
-	case "LOCAL":
-		UseOtherLog(g.LogFileName, UseLocal()).TranceInfo(string(str))
-	case "REMOTE":
-		UseOtherLog(g.LogFileName, UseRemote()).TranceInfo(string(str))
-	case "CONSOLE":
-		UseOtherLog(g.LogFileName, UseConsole()).TranceInfo(string(str))
+		if g.LogFileName == "" {
+			return
+		}
+		switch g.LogRecordMode {
+		case "LOCAL":
+			UseOtherLog(g.LogFileName, UseLocal()).TranceInfo(string(str))
+		case "REMOTE":
+			UseOtherLog(g.LogFileName, UseRemote()).TranceInfo(string(str))
+		case "CONSOLE":
+			UseOtherLog(g.LogFileName, UseConsole()).TranceInfo(string(str))
+		}
 	}
 }

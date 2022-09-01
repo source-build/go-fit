@@ -63,12 +63,16 @@ func main() {
 	gt := fit.NewTrace("track")
 	//写入方式：LOCAL 本地 REMOTE 远程 CONSOLE 终端。NewGinTrace 有参数时才生效
 	gt.SetRecordMode("LOCAL")
+	//设置服务名称
+	gt.SetServiceName("user")
+	//设置服务类型，如api服务、rpc服务等
+	gt.SetServiceType("api")
 
 	//钩子
 	gt.AddHook(new(traceHandler))
 
 	//使用
-	g.Use(gt.TraceHandler)
+	g.Use(gt.TraceHandler())
 
 	//获取上下文
 	g.GET("/", func(c *gin.Context) {
