@@ -109,7 +109,12 @@ func (t TracePlugin) Initialize(db *gorm.DB) error {
 
 func afterTraceHandler(db *gorm.DB) {
 	ctx := db.Statement.Context
-	trace, ok := GetGinTraceCtx(ctx.(*gin.Context))
+	gCtx, ok := ctx.(*gin.Context)
+	if !ok {
+		return
+	}
+	
+	trace, ok := GetGinTraceCtx(gCtx)
 	if !ok {
 		return
 	}

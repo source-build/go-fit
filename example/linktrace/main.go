@@ -25,6 +25,14 @@ func (t traceHandler) AfterProcess(trace *fit.Trace) {
 	fmt.Println("调用后")
 }
 
+type PhoneSmsVCRecord struct {
+	gorm.Model
+	Phone      string `json:"phone" gorm:"type:varchar(11);comment:手机号"`
+	TemplateId string `json:"template_id" gorm:"type:varchar(11);comment:短信模版id"`
+	Code       string `json:"code" gorm:"type:varchar(6);comment:验证码"`
+	Pin        string `json:"pin" gorm:"type:varchar(30);comment:校验值"`
+}
+
 func main() {
 	/* 开启本地日志 */
 	fit.SetLocalLogConfig(fit.LogEntity{
@@ -40,23 +48,24 @@ func main() {
 	err := fit.ConnectDefaultConfigMysql(fit.DefaultConfigMysql{
 		User: "grxc",
 		Pass: "445566",
-		IP:   "127.0.0.1",
+		IP:   "110.42.184.124",
 		Port: "3316",
-		DB:   "user",
+		DB:   "messagepush",
 	}, true)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
+	fit.NewMySQL().AutoMigrate(&PhoneSmsVCRecord{})
+
 	//连接redis单节点
-	err = fit.NewDefaultRedisClient("127.0.0.1:6380", "", "", 0)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	defer fit.CloseRedis()
+	//err = fit.NewDefaultRedisClient("127.0.0.1:6380", "", "", 0)
+	//if err != nil {
+	//	log.Fatalln(err)
+	//}
+	//defer fit.CloseRedis()
 
 	g := gin.New()
-
 	/* ====== 创建 ====== */
 	//参数: 需要写入到的日志文件名称，需要预先配置好, 说白了就是上面的 FileName 字段
 	//如果不传则则不写入本地日志
@@ -93,11 +102,11 @@ func main() {
 	})
 
 	/* 记录Redis信息 */
-	g.GET("/redis", func(c *gin.Context) {
-		//使用fit.WithGinTraceCtx(c)传递当前context,会收集本次操作的信息
-		fit.RedisClient(fit.WithGinTraceCtx(c)).Get("KKKK")
-		c.String(http.StatusOK, "OK")
-	})
+	//g.GET("/redis", func(c *gin.Context) {
+	//	//使用fit.WithGinTraceCtx(c)传递当前context,会收集本次操作的信息
+	//	fit.RedisClient(fit.WithGinTraceCtx(c)).Get("KKKK")
+	//	c.String(http.StatusOK, "OK")
+	//})
 
 	g.Run(":8003")
 }
