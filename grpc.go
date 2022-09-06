@@ -18,9 +18,10 @@ var scheme string
 var creds credentials.TransportCredentials
 
 type Config struct {
-	rule     string
-	scheme   string
-	attempts uint
+	rule        string
+	scheme      string
+	attempts    uint
+	dialOptions []grpc.DialOption
 }
 
 type Option func(*Config)
@@ -72,17 +73,15 @@ func GrpcDial(serveName string, opts ...Option) (*grpc.ClientConn, error) {
 	}
 	target := scheme + "://" + serveName
 
+	defaultDialOption(config)
+
 	if len(config.rule) > 0 {
 		var conn *grpc.ClientConn
 		e, b := sentinel.Entry(config.rule)
 		if b != nil {
 			return nil, errors.New("failed to establish connection. The failure reason may be external service error")
 		} else {
-			cc, err := grpc.Dial(
-				target,
-				grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"round_robin"}`),
-				grpc.WithTransportCredentials(creds),
-			)
+			cc, err := grpc.Dial(target, config.dialOptions...)
 			if err != nil {
 				sentinel.TraceError(e, err)
 			}
@@ -96,11 +95,7 @@ func GrpcDial(serveName string, opts ...Option) (*grpc.ClientConn, error) {
 		var conn *grpc.ClientConn
 		err := retry.Do(
 			func() error {
-				c, err := grpc.Dial(
-					target,
-					grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"round_robin"}`),
-					grpc.WithTransportCredentials(creds),
-				)
+				c, err := grpc.Dial(target, config.dialOptions...)
 				if err != nil {
 					return err
 				}
@@ -115,15 +110,16 @@ func GrpcDial(serveName string, opts ...Option) (*grpc.ClientConn, error) {
 		return conn, nil
 	}
 
-	conn, err := grpc.Dial(
-		target,
-		grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"round_robin"}`),
-		grpc.WithTransportCredentials(creds),
-	)
+	conn, err := grpc.Dial(target, config.dialOptions...)
 	if err != nil {
 		return nil, err
 	}
 	return conn, nil
+}
+
+func defaultDialOption(opt *Config) {
+	opt.dialOptions = append(opt.dialOptions, grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"round_robin"}`))
+	opt.dialOptions = append(opt.dialOptions, grpc.WithTransportCredentials(creds))
 }
 
 func Rule(name string) Option {
@@ -135,6 +131,18 @@ func Rule(name string) Option {
 func Attempts(u uint) Option {
 	return func(c *Config) {
 		c.attempts = u
+	}
+}
+
+func DialOption(opts ...grpc.DialOption) Option {
+	return func(c *Config) {
+		c.dialOptions = opts
+	}
+}
+
+func WithContext() Option {
+	return func(c *Config) {
+		c.dialOptions = append(c.dialOptions, grpc.WithUnaryInterceptor(WithGrpcCtx()))
 	}
 }
 

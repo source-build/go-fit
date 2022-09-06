@@ -5,7 +5,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/source-build/go-fit"
 	"gorm.io/gorm"
-	"log"
 	"net/http"
 )
 
@@ -45,18 +44,18 @@ func main() {
 
 	//初始化mysql
 	//参数2 传的话会记录当次查询的记录，跟着fit.TraceHandler中间件搭配使用
-	err := fit.ConnectDefaultConfigMysql(fit.DefaultConfigMysql{
-		User: "grxc",
-		Pass: "445566",
-		IP:   "110.42.184.124",
-		Port: "3316",
-		DB:   "messagepush",
-	}, true)
-	if err != nil {
-		log.Fatalln(err)
-	}
+	//err := fit.ConnectDefaultConfigMysql(fit.DefaultConfigMysql{
+	//	User: "grxc",
+	//	Pass: "445566",
+	//	IP:   "110.42.184.124",
+	//	Port: "3316",
+	//	DB:   "messagepush",
+	//}, true)
+	//if err != nil {
+	//	log.Fatalln(err)
+	//}
 
-	fit.NewMySQL().AutoMigrate(&PhoneSmsVCRecord{})
+	//fit.NewMySQL().AutoMigrate(&PhoneSmsVCRecord{})
 
 	//连接redis单节点
 	//err = fit.NewDefaultRedisClient("127.0.0.1:6380", "", "", 0)
@@ -68,8 +67,8 @@ func main() {
 	g := gin.New()
 	/* ====== 创建 ====== */
 	//参数: 需要写入到的日志文件名称，需要预先配置好, 说白了就是上面的 FileName 字段
-	//如果不传则则不写入本地日志
-	gt := fit.NewTrace("track")
+	//如果不传则不写入本地日志
+	gt := fit.NewLinkTrace("track")
 	//写入方式：LOCAL 本地 REMOTE 远程 CONSOLE 终端。NewGinTrace 有参数时才生效
 	gt.SetRecordMode("LOCAL")
 	//设置服务名称
@@ -81,7 +80,7 @@ func main() {
 	gt.AddHook(new(traceHandler))
 
 	//使用
-	g.Use(gt.TraceHandler())
+	g.Use(gt.GinTraceHandler())
 
 	//获取上下文
 	g.GET("/", func(c *gin.Context) {

@@ -10,84 +10,55 @@ go get github.com/source-build/go-fit
 
 ## 使用
 
-### 日志
+### 日志收集
 
-#### 配置
+> 非常简单，直接看代码
 
 ```go
+package main
+
+import (
+	"fmt"
+	"github.com/source-build/go-fit"
+)
+
+type remoteLogHook struct {
+}
+
+func (r remoteLogHook) Before(body string) string {
+	return body
+}
+
+func (r remoteLogHook) Error(err error) {
+	fmt.Println("当发生错误时触发", err)
+}
+
 func main() {
+	/* 配置 */
 	//开启本地日志
 	fit.SetLocalLogConfig(fit.LogEntity{
-		LogPath:      "./logs",    //修改日志路径，默认为根目录下的logs
-		FileName:     "diagnosis", //日志文件名称
-		IsDefaultLog: true,        //默认日志，当直接调用Error、Info时会选择默认的
-		ReportCaller: true, //输出文件名 行数, IsDefaultLog = true 时生效
+		LogPath:  "./logs",    //日志路径，默认为根目录下的logs
+		FileName: "diagnosis", //日志文件名称
+		//IsDefaultLog: true,        //默认日志，当直接调用Error、Info时会选择默认的
 	}, fit.LogEntity{
-		LogPath:  "./logs", //修改日志路径，默认为根目录下的logs
+		LogPath:  "./logs", //日志路径，默认为根目录下的logs
 		FileName: "track",  //日志文件名称
 	})
 	//设置堆栈错误信息长度(默认300)，错误信息key应为err
 	fit.SetLogStackLength(100)
 	//开启控制台输出
 	fit.SetOutputToConsole(true)
-	//开启远程支持，这里使用rabbitMQ并使用路由模式
-	fit.SetMqURL("amqp://guest:guest@110127.0.0.1:5672")
-	fit.SetRemoteRabbitMQLog(&fit.RemoteRabbitMQLog{ //
+
+	//开启默认的远程日志，这里使用rabbitMQ并使用路由模式
+	fit.SetMqURL("amqp://guest:guest@127.0.0.1:5672")
+	fit.SetRemoteRabbitMQLog(&fit.RemoteRabbitMQLog{
 		Exchange: "abnormalHandle", //交换机名称
 		Key:      "error",          //key，与此名称绑定的队列才能消费消息
 		Durable:  true,             //交换机持久化
 	})
-	//自定义错误处理
-	c := fit.CustomizeLog()
-	//关闭管道
-	defer fit.CloseCustomizeLog()
-	for msg := range c {
-		fmt.Println("错误信息：", msg)
-	}
-}
-```
 
-#### 基本使用
-```go
-func main() {
-	//以下直接调用的方式都是使用默认日志中的实例
-	fit.Info("这是错误信息")
-	fit.Error("这是错误信息")
-	fit.Warning("这是错误信息")
-	fit.Fatal("这是错误信息")
-}
-```
-
-```go
-package main
-
-func main() {
-	/* 开启本地日志 */
-	fit.SetLocalLogConfig(fit.LogEntity{
-		LogPath:      "./logs",          //修改日志路径，默认为根目录下的logs
-		FileName:     "diagnosis",       //日志文件名称
-		IsDefaultLog: true,              //默认日志，当直接调用Error、Info时会选择默认的
-		Formatter:    fit.TextFormatter, //格式化方式,不传默认json。可选text(fit.TextFormatter)|json(fit.JSONFormatter)
-	}, fit.LogEntity{
-		LogPath:  "./logs", //修改日志路径，默认为根目录下的logs
-		FileName: "track",  //日志文件名称
-	})
-
-	/* 设置堆栈错误信息长度(默认300)，错误信息key应为err */
-	fit.SetLogStackLength(100)
-	/* 开启控制台输出 */
-	fit.SetOutputToConsole(true)
-
-	/*上溯的栈帧数(记录文件名称与行数) */
-	//在配置文件配置或动态设置 log.skip
-	viper.Set("log.skip", 2) //配置 "记录文件名和行数" 时有效。 默认2
-	fit.UseOtherLog("track", fit.UseLocal(), fit.UseSetSkip(viper.GetInt("log.skip"))).Info("hello")
-	//输出: {"caller":"main.go:42","level":"info","msg":"hello","time":"2022-08-28T23:06:30+08:00"}
-
-	fit.Error("这是错误信息")
-
-	/* 使用指定实例日志 */
-	//参数1: 日志文件名称，也就是FileName字段
+	//如果你不想使用默认的本地日志，或自己处理错误，需要的时候才写入，那就使用指定的实例日志
+	//参数1: 日志文件名称，也就是 开启本地日志 的FileName字段
 	//参数2: 配置
 	//	fit.UseConsole() 输出到控制台
 	//	fit.UseLocal()   输出到本地文件
@@ -96,37 +67,37 @@ func main() {
 	//  fit.UseSetSkip(2) 上溯的栈帧数,输出发生错误的位置，包括文件名和行数，参数为 栈帧数。fit.UseReportCaller(true) 时有效
 	fit.UseOtherLog("track", fit.UseLocal()).Error("这是信息消息")
 
-	/* 开启远程支持 */
-	fit.SetRemoteRabbitMQLog(&fit.RemoteRabbitMQLog{ //默认使用路由模式
-		Exchange: "abnormal_handle", //交换机名称
-		Key:      "error",           //key，与此名称绑定的队列才能消费消息
-		Durable:  false,             //交换机持久化
-	})
+	//如果你只想写入本地而且不受全局配置的影响，可以使用以下方式，不过还是需要开启本地日志
+	//如果有参数，则会使用指定的日志实例写入，需要在 开启本地日志
+	fit.LocalLog("track").Info("error info")
 
-	/* 自定义错误处理 */
-	c := fit.CustomizeLog()
-	/* 自定义错误处理|关闭管道 */
-	defer fit.CloseCustomizeLog()
-	for msg := range c {
-		fmt.Println("错误信息：", msg)
-	}
-
-	/**
-	当只有一个参数时,会以字符串格式的形式写入
-	当参数超过2个时，会以json的形式写入，如: fit.Error("name","张三","age":18) -> {"name":"张三","age":18}
-	*/
-	//注意：当 err 为key时，value 应为 error 类型,否则将输出错误信息到本地日志
-	fit.Error("err", errors.New("获取用户信息失败")) //错误级别
-	fit.Warning("错误信息")                      //警告级别
-	fit.Fatal("错误信息")                        //崩溃级别,会停止程序
-
-	/* 仅写入本地日志,不受全局配置的影响，但需要 开启本地日志 */
-	fit.LocalLog().Info("error info")
-
-	/* 仅使用远程配置,不受全局配置的影响，但需要 开启远程支持 */
-	// 第一个参数是类型，当远程写入失败时会将错误信息写入本地
+	//如果你只想使用远程而且不受全局配置的影响，可以使用以下方式，不过还是需要开启远程支持
+	// 第一个参数是日志类型，当远程写入失败时会将错误信息写入本地
 	// 第二个参数跟 Error Warning Fatal 用法一致
-	fit.RemoteLog(fit.ErrorLevel, "err", "获取用户信息失败")
+	fit.RemoteLog(fit.ErrorLevel, "msg", "获取用户信息失败")
+
+	//在远程日志发送之前做点什么?
+	fit.AddRemoteLogHook(new(remoteLogHook))
+
+	//自定义错误处理
+	c := fit.CustomizeLog()
+	go func(c <-chan string) {
+		defer fit.CloseCustomizeLog()
+		for msg := range c {
+			fmt.Println("错误信息：", msg)
+		}
+	}(c)
+
+	//快捷使用
+	fit.Error()   //错误
+	fit.Warning() //警告
+	fit.Info()    //消息
+	fit.Fatal()   //致命的
+
+	fit.ErrorJSON(fit.H{"title": "666"})
+	fit.WarningJSON(fit.H{"title": "666"})
+	fit.InfoJSON(fit.H{"title": "666"})
+	fit.FatalJSON(fit.H{"title": "666"})
 
 	/* 其他用法 */
 	s := fit.Fields{"key": "value"}.ToSlice()
@@ -134,44 +105,12 @@ func main() {
 }
 ```
 
-#### 使用指定实例日志
-```go
-func main() {
-	//参数1: 日志文件名称，也就是FileName字段
-	//参数2: 配置
-	//	fit.UseConsole() 输出到控制台
-	//	fit.UseLocal()   输出到本地文件
-	//	fit.UseRemote()  输出到远程mq
-	//  fit.UseReportCaller(true) 记录文件名，行数
-	//  fit.UseSetSkip(2) 上溯的栈帧数,输出发生错误的位置，包括文件名和行数，参数为 栈帧数。fit.UseReportCaller(true) 时有效
-	fit.UseOtherLog("track", fit.UseLocal()).Error("这是信息消息")
-}
-```
-
-#### 其他用法
-```go
-func main() {
-	//当只有一个参数时,会以字符串格式的形式写入
-	//当参数超过2个时，会以json的形式写入，如: fit.Error("name","张三","age":18) -> {"name":"张三","age":18}
-	
-	//注意：当 err 为key时，value 应为 error 类型
-	//fit.Info("错误信息")                           //消息级别
-	//fit.Warning("错误信息")                        //警告级别
-	//fit.Error("err", errors.New("获取用户信息失败"))//错误级别
-	//fit.Fatal("错误信息")                          //崩溃级别,会停止程序
-	
-	/* 仅写入本地日志,不受全局配置的影响，但需要 开启本地日志 */
-	//fit.LocalLog().Info("error info")
-	
-	/* 其他用法 */
-	//s := fit.Fields{"key": "value"}.ToSlice()
-	//fit.Error(s...)
-}
-```
-
 ### 简单的链路追踪
-#### 使用
+
 > 直接上代码
+
+#### gin使用
+
 ```go
 package main
 
@@ -231,7 +170,6 @@ func main() {
 	defer fit.CloseRedis()
 
 	g := gin.New()
-
 	/* ====== 创建 ====== */
 	//参数: 需要写入到的日志文件名称，需要预先配置好, 说白了就是上面的 FileName 字段
 	//如果不传则则不写入本地日志
@@ -273,95 +211,249 @@ func main() {
 		fit.RedisClient(fit.WithGinTraceCtx(c)).Get("KKKK")
 		c.String(http.StatusOK, "OK")
 	})
+	
+	/* 记录第三方请求信息 */
+	g.GET("/thirdParty", func(c *gin.Context) {
+		trace, _ := fit.GetGinTraceCtx(c)
+		trace.AppendThirdPartyReq(&fit.LinkTraceDialog{
+			Request:   nil,
+			Responses: nil,
+			Success:   false,
+			Cost:      "",
+		})
+		c.String(http.StatusOK, "OK")
+	})
 
 	g.Run(":8003")
 }
 ```
+
+#### rpc使用
+
+##### 服务端
+
+```go
+func main() {
+	/* 开启本地日志 */
+	fit.SetLocalLogConfig(fit.LogEntity{
+		LogPath:      "logs",          //修改日志路径，默认为根目录下的logs
+		FileName:     "track",           //日志文件名称
+		Formatter:    fit.JSONFormatter, //格式化方式,不传默认json。可选text(fit.TextFormatter)|json(fit.JSONFormatter)
+		IsDefaultLog: true,
+		ReportCaller: true, //输出文件名 行数, IsDefaultLog = true 时生效
+	})
+
+	/* ====== 创建 ====== */
+	//参数: 需要写入到的日志文件名称，需要预先配置好, 说白了就是上面的 FileName 字段
+	//如果不传则不写入本地日志
+	gt := fit.NewLinkTrace("track")
+	//写入方式：LOCAL 本地 REMOTE 远程 CONSOLE 终端。NewGinTrace 有参数时才生效
+	gt.SetRecordMode("LOCAL")
+	//设置服务名称
+	gt.SetServiceName("user")
+	//设置服务类型，如api服务、rpc服务等
+	gt.SetServiceType("rpc")
+	
+	var opts []grpc.ServerOption
+
+	//日志收集
+	//由于只能设置一个拦截器，如果你也想使用拦截器，则需要添加一个hook
+	//gt.GrpcHook(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	//	//如果不调用handler，将不会继续往下处理
+	//	fmt.Println("请求来了")
+	//	res, err := handler(ctx, req)
+	//	return res, err
+	//})
+	//注意：这是一元拦截器
+	opts = append(opts, grpc.UnaryInterceptor(gt.GrpcServerInterceptor()))
+
+	rpcServer := grpc.NewServer(opts...)
+	pb.RegisterPhoneLoginSmsVerCodeServer(rpcServer, new(phoneSms))
+
+	quit := make(chan os.Signal, 1)
+	go func() {
+		signal.Notify(quit, syscall.SIGHUP, syscall.SIGINT, syscall.SIGKILL)
+		if err := rpcServer.Serve(listen); err != nil {
+			log.Fatalln(err)
+		}
+	}()
+	<-quit
+	fmt.Println("service close!")
+}
+
+type phoneSms struct {
+	pb.UnimplementedPhoneLoginSmsVerCodeServer
+}
+
+func (p phoneSms) Send(ctx context.Context, request *pb.SendRequest) (*pb.Response, error) {
+	//获取trace
+	trace, ok := fit.GetTraceCtx(ctx)
+	if ok {
+		fmt.Println(trace)
+	}
+	return &pb.Response{
+		Msg:    "OK",
+		Code:   0,
+		Result: "OK",
+	}, nil
+}
+```
+
+##### 客户端
+```go
+func main() {
+	//连接etcd
+	client, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{"127.0.0.1:2479"},
+		DialTimeout: time.Second * 5,
+	})
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	/* ====== 创建 ====== */
+	//参数: 需要写入到的日志文件名称，需要预先配置好, 说白了就是上面的 FileName 字段
+	//如果不传则不写入本地日志
+	gt := fit.NewLinkTrace()
+	//写入方式：LOCAL 本地 REMOTE 远程 CONSOLE 终端。NewGinTrace 有参数时才生效
+	//gt.SetRecordMode("LOCAL")
+	//设置服务名称
+	gt.SetServiceName("user")
+	//设置服务类型，如api服务、rpc服务等
+	gt.SetServiceType("api")
+	
+	//初始化客户端解析器
+	//发起grpc请求时会自动解析并使用负载均衡策略
+	err = fit.NewGrpcClientBuilder(fit.GrpcBuilderConfig{
+		EtcdClient:         client,
+		ClientCertPath:     "./keys/client.crt",
+		ClientKeyPath:      "./keys/client.key",
+		RootCrtPath:        "./keys/ca.crt",
+		ServerNameOverride: "SourceBuild.cn",
+	})
+	if err != nil {
+		log.Fatalln(err)
+	}
+	
+	g := gin.New()
+	g.Use(gt.GinTraceHandler())
+
+	g.GET("/", func(c *gin.Context) {
+		//传递fit.WithContext()会在拦截器中记录操作信息，耗时等,
+		conn, err := fit.GrpcDial("/serves/rpc/dpp",
+			fit.Attempts(5),
+			fit.WithContext(),
+		)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		defer conn.Close()
+
+		resp := pb.NewPhoneLoginSmsVerCodeClient(conn)
+		//记录rpc调用信息，需要传递context
+		res, err := resp.Send(c, &pb.SendRequest{
+			PhoneCode:  "OK",
+			Expired:    200,
+			TemplateId: 0,
+		})
+		if err != nil {
+			c.String(http.StatusOK, "ERR")
+			return
+		}
+		
+		fmt.Println(res.Msg)
+		
+		c.String(http.StatusOK, "OK")
+	})
+	g.Run(":8005")	
+}
+```
+
 #### 结果
+
 ```json
  {
-    "trace_id":"d2252a9a-6995-4148-9f26-d7dd5f7c3f93",
-    "request":{
-        "method":"GET",
-        "url":"/mysql",
-        "header":{
-            "Accept":[
-                "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9"
-            ],
-            "Accept-Encoding":[
-                "gzip, deflate, br"
-            ],
-            "Accept-Language":[
-                "zh-CN,zh;q=0.9,en;q=0.8"
-            ],
-            "Cache-Control":[
-                "max-age=0"
-            ],
-            "Connection":[
-                "keep-alive"
-            ],
-            "Cookie":[
-                "mobile-Token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJsb2dpbklkIjoic3lzX3VzZXI6MTEyNSIsInJuIjoiUzhFVnpNSXY5YkpYTGoyd2ZVOW1tdFhYOHdtUFJjcFMifQ.3Mw1UaOqGBEtAh0T_uTLnmC7mX9r0KlynzzhXmJR8eg; Admin-Token=eyJhbGciOiJIUzUxMiJ9.eyJsb2dpbl91c2VyX2tleSI6ImM2NTY0ZTRhLWEwNzgtNDkyYi04YjAxLWRlODVhZDFjY2QxNiJ9.3bbJdhVbtQ3wd5kEoacRoKayRqWYs36Lc0qi9Pv31JYI4tVAcXeGHzfhPdrOAmbbei6P15PXT_5NZb07w0Eguw; sidebarStatus=0"
-            ],
-            "Sec-Ch-Ua":[
-                "\"Chromium\";v=\"104\", \" Not A;Brand\";v=\"99\", \"Google Chrome\";v=\"104\""
-            ],
-            "Sec-Ch-Ua-Mobile":[
-                "?0"
-            ],
-            "Sec-Ch-Ua-Platform":[
-                "\"macOS\""
-            ],
-            "Sec-Fetch-Dest":[
-                "document"
-            ],
-            "Sec-Fetch-Mode":[
-                "navigate"
-            ],
-            "Sec-Fetch-Site":[
-                "none"
-            ],
-            "Sec-Fetch-User":[
-                "?1"
-            ],
-            "Upgrade-Insecure-Requests":[
-                "1"
-            ],
-            "User-Agent":[
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36"
-            ]
-        },
-        "body":{
-
-        }
+  "trace_id": "d2252a9a-6995-4148-9f26-d7dd5f7c3f93",
+  "request": {
+    "method": "GET",
+    "url": "/mysql",
+    "header": {
+      "Accept": [
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9"
+      ],
+      "Accept-Encoding": [
+        "gzip, deflate, br"
+      ],
+      "Accept-Language": [
+        "zh-CN,zh;q=0.9,en;q=0.8"
+      ],
+      "Cache-Control": [
+        "max-age=0"
+      ],
+      "Connection": [
+        "keep-alive"
+      ],
+      "Cookie": [
+        "mobile-Token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJsb2dpbklkIjoic3lzX3VzZXI6MTEyNSIsInJuIjoiUzhFVnpNSXY5YkpYTGoyd2ZVOW1tdFhYOHdtUFJjcFMifQ.3Mw1UaOqGBEtAh0T_uTLnmC7mX9r0KlynzzhXmJR8eg; Admin-Token=eyJhbGciOiJIUzUxMiJ9.eyJsb2dpbl91c2VyX2tleSI6ImM2NTY0ZTRhLWEwNzgtNDkyYi04YjAxLWRlODVhZDFjY2QxNiJ9.3bbJdhVbtQ3wd5kEoacRoKayRqWYs36Lc0qi9Pv31JYI4tVAcXeGHzfhPdrOAmbbei6P15PXT_5NZb07w0Eguw; sidebarStatus=0"
+      ],
+      "Sec-Ch-Ua": [
+        "\"Chromium\";v=\"104\", \" Not A;Brand\";v=\"99\", \"Google Chrome\";v=\"104\""
+      ],
+      "Sec-Ch-Ua-Mobile": [
+        "?0"
+      ],
+      "Sec-Ch-Ua-Platform": [
+        "\"macOS\""
+      ],
+      "Sec-Fetch-Dest": [
+        "document"
+      ],
+      "Sec-Fetch-Mode": [
+        "navigate"
+      ],
+      "Sec-Fetch-Site": [
+        "none"
+      ],
+      "Sec-Fetch-User": [
+        "?1"
+      ],
+      "Upgrade-Insecure-Requests": [
+        "1"
+      ],
+      "User-Agent": [
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36"
+      ]
     },
-    "response":{
-        "header":{
-            "Content-Type":[
-                "text/plain; charset=utf-8"
-            ]
-        },
-        "body":"OK",
-        "http_code":200,
-        "http_msg":"",
-        "cost":""
+    "body": {
+    }
+  },
+  "response": {
+    "header": {
+      "Content-Type": [
+        "text/plain; charset=utf-8"
+      ]
     },
-    "third_party_requests":null,
-    "sqls":[
-        {
-            "timestamp":"2022-08-31 18:07:04",
-            "stack":"main.go:87",
-            "sql":"SELECT * FROM `users` WHERE id = 9 AND `users`.`deleted_at` IS NULL LIMIT 1",
-            "rows_affected":1,
-            "cost":"94.746375ms"
-        }
-    ],
-    "redis":null,
-    "success":true,
-    "start":1661940424,
-    "end":1661940424,
-    "cost":"94.942791ms",
-    "extend":null
+    "body": "OK",
+    "http_code": 200,
+    "http_msg": "",
+    "cost": ""
+  },
+  "third_party_requests": null,
+  "sqls": [
+    {
+      "timestamp": "2022-08-31 18:07:04",
+      "stack": "main.go:87",
+      "sql": "SELECT * FROM `users` WHERE id = 9 AND `users`.`deleted_at` IS NULL LIMIT 1",
+      "rows_affected": 1,
+      "cost": "94.746375ms"
+    }
+  ],
+  "redis": null,
+  "success": true,
+  "start": 1661940424,
+  "end": 1661940424,
+  "cost": "94.942791ms",
+  "extend": null
 }
 ```
 
@@ -797,6 +889,14 @@ log.Fatal("主动应答失败:", err)
 #### 客户端
 
 ```go
+// ClientInterceptor 客户端拦截器
+func ClientInterceptor(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+start := time.Now()
+err := invoker(ctx, method, req, reply, cc, opts...)
+log.Printf("method == %s ; req == %v ; rep == %v ; duration == %s ; error == %v\n", method, req, reply, time.Since(start), err)
+return err
+}
+func main() {
 //连接etcd
 client, err := clientv3.New(clientv3.Config{
 Endpoints:   []string{"127.0.0.1:2379"},
@@ -845,18 +945,23 @@ if err != nil {
 log.Fatalln(err)
 }
 
-//参数一:etcd的key,value格式应为ip:port
-//参数二:多参数
+//参数一:服务名称，下面会讲
+//参数二:配置
 //fit.Attempts(5) //使用重试策略，参数为重试次数
 //fit.Rule("errorRatio") //使用熔断机制，与重试策略而二选一
-//无参则调用grpc.Dial()
-conn, err := fit.GrpcDial("/serves/rpc/dpp11", fit.Attempts(5))
+//fit.DialOption() //添加gRPC配置，具体可以看看gRPC文档
+//注意：服务名称，也就是etcd的key
+// 如果etcd中有多个服务注册,比如有这些key: /serves/rpc/user/1 /serves/rpc/user/2 /serves/rpc/user/3
+// 那么调用GrpcDial时只需要写 /serves/rpc/user 这样就会以轮训的方式依次请求 1 2 3
+conn, err := fit.GrpcDial("/serves/rpc/user",
+fit.Attempts(5),
+fit.DialOption(grpc.WithUnaryInterceptor(ClientInterceptor)), //添加客户端拦截器
+)
 if err != nil {
 log.Fatalln("连接失败", err)
 }
 defer conn.Close()
 
-//调用
 e := pb.NewEmailServiceClient(conn)
 res, err := e.SendEmailVerificationCode(nil, &pb.VerCodeRequest{
 Email:  "123@qq.com",
@@ -867,6 +972,7 @@ log.Fatalln(err)
 }
 
 fmt.Println(res.Code, res.Msg)
+}
 ```
 
 ### 服务注册与发现
@@ -1326,32 +1432,32 @@ func main() {
 
 ```go
 func main() {
-	//参数2 传的话会记录当次查询的记录，跟着trace中间件搭配使用
-	err := fit.ConnectDefaultConfigMysql(fit.DefaultConfigMysql{
-		User: "grxc",
-		Pass: "445566",
-		IP:   "110.42.184.124",
-		Port: "3316",
-		DB:   "user",
-	}, true)
-	if err != nil {
-		fit.Fatal("init msql err:" + err.Error())
-	}
+//参数2 传的话会记录当次查询的记录，跟着trace中间件搭配使用
+err := fit.ConnectDefaultConfigMysql(fit.DefaultConfigMysql{
+User: "grxc",
+Pass: "445566",
+IP:   "110.42.184.124",
+Port: "3316",
+DB:   "user",
+}, true)
+if err != nil {
+fit.Fatal("init msql err:" + err.Error())
+}
 
-	//自定义配置的方式连接
-	addr := "root:123@tcp(127.0.0.1:3369)/foo?charset=utf8mb4&parseTime=True&loc=Local"
-	pool, err := fit.ConnectMysql(addr, &gorm.Config{}, true)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	defer pool.Close()
+//自定义配置的方式连接
+addr := "root:123@tcp(127.0.0.1:3369)/foo?charset=utf8mb4&parseTime=True&loc=Local"
+pool, err := fit.ConnectMysql(addr, &gorm.Config{}, true)
+if err != nil {
+log.Fatalln(err)
+}
+defer pool.Close()
 
-	//设置空闲连接池中的最大连接数
-	pool.SetMaxIdleConns(10)
-	//设置打开数据库连接的最大数量
-	pool.SetMaxOpenConns(200)
-	//设置连接可复用的最大时间。
-	pool.SetConnMaxLifetime(time.Hour)
+//设置空闲连接池中的最大连接数
+pool.SetMaxIdleConns(10)
+//设置打开数据库连接的最大数量
+pool.SetMaxOpenConns(200)
+//设置连接可复用的最大时间。
+pool.SetConnMaxLifetime(time.Hour)
 }
 ```
 

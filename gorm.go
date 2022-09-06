@@ -113,7 +113,7 @@ func afterTraceHandler(db *gorm.DB) {
 	if !ok {
 		return
 	}
-	
+
 	trace, ok := GetGinTraceCtx(gCtx)
 	if !ok {
 		return

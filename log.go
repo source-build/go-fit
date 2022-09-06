@@ -37,6 +37,8 @@ const (
 	TextFormatter
 )
 
+var remoteTemplateHandler RemoteLogTemplater
+
 type RemoteRabbitMQLog struct {
 	Exchange string
 	Key      string
@@ -101,27 +103,56 @@ type reportCaller struct {
 	line int
 }
 
-type Local struct {
+type RemoteLogTemplater interface {
+	Before(body string) string
+	Error(err error)
 }
 
-func LocalLog() Local {
+type Local struct {
+	instanceName string
+}
+
+func LocalLog(name ...string) Local {
+	if len(name) > 0 {
+		return Local{instanceName: name[0]}
+	}
 	return Local{}
 }
 
 func (l Local) Info(v ...interface{}) {
-	writeLocalLog(InfoLevel, getBody(v...))
+	var caller reportCaller
+	if _, file, line, ok := runtime.Caller(1); ok {
+		caller.file = file
+		caller.line = line
+	}
+	writeLocalLogInstance(l.instanceName, InfoLevel, getBody(v...), caller)
 }
 
 func (l Local) Error(v ...interface{}) {
-	writeLocalLog(ErrorLevel, getBody(v...))
+	var caller reportCaller
+	if _, file, line, ok := runtime.Caller(1); ok {
+		caller.file = file
+		caller.line = line
+	}
+	writeLocalLogInstance(l.instanceName, ErrorLevel, getBody(v...), caller)
 }
 
 func (l Local) Warning(v ...interface{}) {
-	writeLocalLog(WarningLevel, getBody(v...))
+	var caller reportCaller
+	if _, file, line, ok := runtime.Caller(1); ok {
+		caller.file = file
+		caller.line = line
+	}
+	writeLocalLogInstance(l.instanceName, WarningLevel, getBody(v...), caller)
 }
 
 func (l Local) Fatal(v ...interface{}) {
-	writeLocalLog(FatalLevel, getBody(v...))
+	var caller reportCaller
+	if _, file, line, ok := runtime.Caller(1); ok {
+		caller.file = file
+		caller.line = line
+	}
+	writeLocalLogInstance(l.instanceName, FatalLevel, getBody(v...), caller)
 }
 
 func getBody(v ...interface{}) string {
@@ -139,7 +170,10 @@ func getBody(v ...interface{}) string {
 			continue
 		}
 		if indx == i {
-			v[i] = SubStrDecodeRuneInString(kv.(error).Error(), stackLength)
+			er, ok := kv.(error)
+			if ok {
+				v[i] = SubStrDecodeRuneInString(er.Error(), stackLength)
+			}
 			break
 		}
 	}
@@ -159,6 +193,19 @@ func writeLocalLog(level int, body string, rc ...reportCaller) {
 		return
 	}
 
+	writeFile(el, level, body, rc)
+}
+
+func writeLocalLogInstance(instance string, level int, body string, rc ...reportCaller) {
+	el, ok := logs[instance]
+	if !ok {
+		return
+	}
+
+	writeFile(el, level, body, rc)
+}
+
+func writeFile(el *logrus.Logger, level int, body string, rc []reportCaller) {
 	if len(rc) > 0 && len(rc[0].file) > 0 {
 		_, file := filepath.Split(rc[0].file)
 		caller := StringSpliceTag(":", file, strconv.Itoa(rc[0].line))
@@ -199,8 +246,8 @@ func output(level int, v ...interface{}) {
 		}
 	}()
 
+	//slice to json
 	body := getBody(v...)
-
 	if customizeLog != nil {
 		customizeLog <- body
 	}
@@ -227,9 +274,67 @@ func output(level int, v ...interface{}) {
 			return
 		}
 		defer mq.Close()
+		if remoteTemplateHandler != nil {
+			body = remoteTemplateHandler.Before(body)
+		}
 		err = mq.DefExchangeDeclare(remoteRabbitMQLog.Exchange, KIND_DIRECT, remoteRabbitMQLog.Durable).
 			Publish(body, remoteRabbitMQLog.Key)
 		if err != nil {
+			if remoteTemplateHandler != nil {
+				remoteTemplateHandler.Error(err)
+			}
+			writeLocalLog(ErrorLevel, H{"title": "Publish() error", "error": err.Error()}.ToString())
+			return
+		}
+	}
+}
+
+func outputJSON(level int, s string) {
+	if outConsole {
+		fmt.Println(s)
+	}
+
+	defer func() {
+		if err := recover(); err != nil {
+			writeLocalLog(ErrorLevel, H{"title": "exception capture,an error occurred in the output function", "error": err}.ToString())
+		}
+	}()
+
+	if customizeLog != nil {
+		customizeLog <- s
+	}
+
+	var caller reportCaller
+	if isReportCaller {
+		if _, file, line, ok := runtime.Caller(2); ok {
+			caller.file = file
+			caller.line = line
+		}
+	}
+
+	if len(caller.file) > 0 {
+		writeLocalLog(level, s, caller)
+	} else {
+		writeLocalLog(level, s)
+	}
+
+	//remote log
+	if remoteRabbitMQLog != nil {
+		mq, err := NewRabbitMQ()
+		if err != nil {
+			writeLocalLog(ErrorLevel, H{"title": "NewRabbitMQ() error", "error": err.Error()}.ToString())
+			return
+		}
+		defer mq.Close()
+		if remoteTemplateHandler != nil {
+			s = remoteTemplateHandler.Before(s)
+		}
+		err = mq.DefExchangeDeclare(remoteRabbitMQLog.Exchange, KIND_DIRECT, remoteRabbitMQLog.Durable).
+			Publish(s, remoteRabbitMQLog.Key)
+		if err != nil {
+			if remoteTemplateHandler != nil {
+				remoteTemplateHandler.Error(err)
+			}
 			writeLocalLog(ErrorLevel, H{"title": "Publish() error", "error": err.Error()}.ToString())
 			return
 		}
@@ -240,16 +345,32 @@ func Info(v ...interface{}) {
 	output(InfoLevel, v...)
 }
 
+func InfoJSON(h H) {
+	outputJSON(InfoLevel, h.ToString())
+}
+
 func Error(v ...interface{}) {
 	output(ErrorLevel, v...)
+}
+
+func ErrorJSON(h H) {
+	outputJSON(ErrorLevel, h.ToString())
 }
 
 func Warning(v ...interface{}) {
 	output(WarningLevel, v...)
 }
 
+func WarningJSON(h H) {
+	outputJSON(ErrorLevel, h.ToString())
+}
+
 func Fatal(v ...interface{}) {
 	output(FatalLevel, v...)
+}
+
+func FatalJSON(h H) {
+	output(FatalLevel, h.ToString())
 }
 
 func SetOutputToConsole(v bool) {
@@ -392,9 +513,15 @@ func (u *useOtherConfig) output(level int, v ...interface{}) {
 			return
 		}
 		defer mq.Close()
+		if remoteTemplateHandler != nil {
+			body = remoteTemplateHandler.Before(body)
+		}
 		err = mq.DefExchangeDeclare(remoteRabbitMQLog.Exchange, KIND_DIRECT, remoteRabbitMQLog.Durable).
 			Publish(body, remoteRabbitMQLog.Key)
 		if err != nil {
+			if remoteTemplateHandler != nil {
+				remoteTemplateHandler.Error(err)
+			}
 			u.writeLocalLog(ErrorLevel, H{"title": "Publish() error", "error": err.Error()}.ToString())
 			return
 		}
@@ -434,6 +561,10 @@ func (u *useOtherConfig) writeLocalLog(level int, body string, rc ...reportCalle
 	case TranceInfoLevel:
 		u.log.WithFields(logrus.Fields{"trace_info": body}).Info()
 	}
+}
+
+func AddRemoteLogHook(r RemoteLogTemplater) {
+	remoteTemplateHandler = r
 }
 
 func SetLocalLogConfig(entity ...LogEntity) {
@@ -497,9 +628,15 @@ func RemoteLog(t int, v ...interface{}) {
 			writeLocalLog(t, body)
 			return
 		}
+		if remoteTemplateHandler != nil {
+			body = remoteTemplateHandler.Before(body)
+		}
 		err = mq.DefExchangeDeclare(remoteRabbitMQLog.Exchange, KIND_DIRECT, remoteRabbitMQLog.Durable).
 			Publish(body, remoteRabbitMQLog.Key)
 		if err != nil {
+			if remoteTemplateHandler != nil {
+				remoteTemplateHandler.Error(err)
+			}
 			writeLocalLog(t, body)
 			return
 		}

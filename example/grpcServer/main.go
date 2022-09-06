@@ -1,58 +1,127 @@
 package main
 
+import (
+	"context"
+	"fmt"
+	"github.com/source-build/go-fit"
+	"github.com/source-build/go-fit/pb"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"google.golang.org/grpc"
+	"log"
+	"net"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+)
+
+type phoneSms struct {
+	pb.UnimplementedPhoneLoginSmsVerCodeServer
+}
+
+func (p phoneSms) Send(ctx context.Context, request *pb.SendRequest) (*pb.Response, error) {
+	trace, ok := fit.GetTraceCtx(ctx)
+	if ok {
+		fmt.Println(trace.TraceId)
+	}
+	return &pb.Response{
+		Msg:    "OK",
+		Code:   0,
+		Result: "OK",
+	}, nil
+}
+
+func (p phoneSms) Check(ctx context.Context, request *pb.CheckRequest) (*pb.Response, error) {
+	return &pb.Response{
+		Msg:    "OK",
+		Code:   0,
+		Result: "OK",
+	}, nil
+}
+
 func main() {
-	////连接etcd
-	//client, err := clientv3.New(clientv3.Config{
-	//	Endpoints:   []string{"127.0.0.1:2479"},
-	//	DialTimeout: time.Second * 5,
+	client, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{"127.0.0.1:2479"},
+		DialTimeout: time.Second * 5,
+	})
+	//获取ip
+	localIp, _ := fit.GetOutBoundIP()
+
+	listen, err := net.Listen("tcp", ":8000")
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	//create tls
+	cred, err := fit.NewServiceTLS(&fit.CertPool{
+		CertFile: "keys/server.crt",
+		KeyFile:  "keys/server.key",
+		CaCert:   "keys/ca.crt",
+	})
+	if err != nil {
+		fit.Fatal("create tls failed err:" + err.Error())
+	}
+
+	/* 开启本地日志 */
+	fit.SetLocalLogConfig(fit.LogEntity{
+		LogPath:      "./logs",          //修改日志路径，默认为根目录下的logs
+		FileName:     "track",           //日志文件名称
+		Formatter:    fit.JSONFormatter, //格式化方式,不传默认json。可选text(fit.TextFormatter)|json(fit.JSONFormatter)
+		IsDefaultLog: true,
+		ReportCaller: true, //输出文件名 行数, IsDefaultLog = true 时生效
+	})
+
+	/* ====== 创建 ====== */
+	//参数: 需要写入到的日志文件名称，需要预先配置好, 说白了就是上面的 FileName 字段
+	//如果不传则不写入本地日志
+	gt := fit.NewLinkTrace("track")
+	//写入方式：LOCAL 本地 REMOTE 远程 CONSOLE 终端。NewGinTrace 有参数时才生效
+	gt.SetRecordMode("LOCAL")
+	//设置服务名称
+	gt.SetServiceName("user")
+	//设置服务类型，如api服务、rpc服务等
+	gt.SetServiceType("rpc")
+
+	var opts []grpc.ServerOption
+
+	opts = append(opts, grpc.Creds(cred))
+
+	//日志收集
+	//由于只能设置一个拦截器，如果你也想使用拦截器，则需要添加一个hook
+	//gt.GrpcHook(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	//	//如果不调用handler，将不会继续往下处理
+	//	fmt.Println("请求来了")
+	//	res, err := handler(ctx, req)
+	//	return res, err
 	//})
-	//if err != nil {
-	//	log.Fatalln("连接失败", err)
-	//}
-	//
-	////create tls
-	//cred, err := fit.NewServiceTLS(&fit.CertPool{
-	//	CertFile: "keys/server.crt",
-	//	KeyFile:  "keys/server.key",
-	//	CaCert:   "keys/ca.crt",
-	//})
-	//if err != nil {
-	//	fit.Fatal("create tls failed err:" + err.Error())
-	//}
-	//
-	//listen, err := net.Listen("tcp", ":8000")
-	//if err != nil {
-	//	log.Fatalln(err)
-	//}
-	//
-	//rpcServer := grpc.NewServer(grpc.Creds(cred))
-	//
-	//pb.RegisterEmailPinServer(rpcServer, new(User))
-	//
-	////进行映射绑定。在指定的gRPC服务器上注册服务器反射服务。
-	////reflection.Register(rpcServer)
-	//
-	//var s *fit.ServiceRegister
-	//quit := make(chan os.Signal, 1)
-	//go func() {
-	//	signal.Notify(quit, syscall.SIGHUP, syscall.SIGINT, syscall.SIGKILL)
-	//	localIp, _ := fit.GetOutBoundIP()
-	//	s, err = fit.NewServiceRegister(&fit.ServiceRegister{
-	//		Ctx:    context.Background(),
-	//		Client: client,
-	//		Key:    "/serves/rpc/dpp/Mjhd",
-	//		Value:  localIp + ":8000",
-	//		Lease:  10,
-	//	})
-	//	if err != nil {
-	//		log.Fatalln(err)
-	//	}
-	//	fmt.Println("service start success!!!")
-	//	if err := rpcServer.Serve(listen); err != nil {
-	//		log.Fatalln(err)
-	//	}
-	//}()
-	//<-quit
-	//s.Close()
-	//fmt.Println("service close!")
+	//注意：这是一元拦截器
+	opts = append(opts, grpc.UnaryInterceptor(gt.GrpcServerInterceptor()))
+
+	rpcServer := grpc.NewServer(opts...)
+
+	pb.RegisterPhoneLoginSmsVerCodeServer(rpcServer, new(phoneSms))
+
+	//服务注册
+	s, err := fit.NewServiceRegister(&fit.ServiceRegister{
+		Ctx:    context.Background(),
+		Client: client,
+		Key:    "/serves/rpc/dpp/Mjhd",
+		Value:  localIp + ":8000",
+		Lease:  20,
+	})
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	quit := make(chan os.Signal, 1)
+	go func() {
+		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+		fmt.Println("service start success!!!")
+		if err := rpcServer.Serve(listen); err != nil {
+			log.Fatalln(err)
+		}
+	}()
+	<-quit
+	s.Close()
+	fmt.Println("service close!")
 }
