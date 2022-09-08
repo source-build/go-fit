@@ -302,7 +302,7 @@ func (r *RedisOption) Get(key string) (string, error) {
 }
 
 // HSet Set the value of the field  in the hash table key to value
-func (r *RedisOption) HSet(key string, values ...interface{}) bool {
+func (r *RedisOption) HSet(key string, values ...interface{}) (bool, error) {
 	if r.ctx == nil {
 		r.ctx = context.Background()
 	}
@@ -326,10 +326,7 @@ func (r *RedisOption) HSet(key string, values ...interface{}) bool {
 			ok, err = rClusterClient.Expire(ctx, key, r.expire).Result()
 		}
 	}
-	if err != nil || !ok {
-		return false
-	}
-	return true
+	return ok, err
 }
 
 // HGet Get values for all given fields
