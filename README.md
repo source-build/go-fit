@@ -173,7 +173,7 @@ func main() {
 	/* ====== 创建 ====== */
 	//参数: 需要写入到的日志文件名称，需要预先配置好, 说白了就是上面的 FileName 字段
 	//如果不传则则不写入本地日志
-	gt := fit.NewTrace("track")
+	gt := fit.NewLinkTrace("track")
 	//写入方式：LOCAL 本地 REMOTE 远程 CONSOLE 终端。NewGinTrace 有参数时才生效
 	gt.SetRecordMode("LOCAL")
 	//设置服务名称
