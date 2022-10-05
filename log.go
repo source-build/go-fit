@@ -87,8 +87,16 @@ type LogEntity struct {
 	ReportCaller bool
 }
 
-func GetLogs() map[string]*logrus.Logger {
+func GetLogInstances() map[string]*logrus.Logger {
 	return logs
+}
+
+func GetLogInstance(name string) (LoggerInstance *logrus.Logger, ok bool) {
+	logger, ok := logs[name]
+	if !ok {
+		return nil, false
+	}
+	return logger, true
 }
 
 type Level interface {
@@ -277,7 +285,7 @@ func output(level int, v ...interface{}) {
 		if remoteTemplateHandler != nil {
 			body = remoteTemplateHandler.Before(body)
 		}
-		err = mq.DefExchangeDeclare(remoteRabbitMQLog.Exchange, KIND_DIRECT, remoteRabbitMQLog.Durable).
+		err = mq.DefExchangeDeclare(remoteRabbitMQLog.Exchange, KIND_DIRECT, remoteRabbitMQLog.Durable, true).
 			Publish(body, remoteRabbitMQLog.Key)
 		if err != nil {
 			if remoteTemplateHandler != nil {
@@ -329,7 +337,7 @@ func outputJSON(level int, s string) {
 		if remoteTemplateHandler != nil {
 			s = remoteTemplateHandler.Before(s)
 		}
-		err = mq.DefExchangeDeclare(remoteRabbitMQLog.Exchange, KIND_DIRECT, remoteRabbitMQLog.Durable).
+		err = mq.DefExchangeDeclare(remoteRabbitMQLog.Exchange, KIND_DIRECT, remoteRabbitMQLog.Durable, true).
 			Publish(s, remoteRabbitMQLog.Key)
 		if err != nil {
 			if remoteTemplateHandler != nil {
@@ -437,18 +445,19 @@ func UseReportCaller(v bool) UseOtherFunc {
 	}
 }
 
-func UseOtherLog(name string, opts ...UseOtherFunc) *useOtherConfig {
+func OtherLog(name string, opts ...UseOtherFunc) *useOtherConfig {
 	var config useOtherConfig
-	el, ok := logs[name]
-	if !ok {
-		return &config
-	}
 
 	for _, opt := range opts {
 		opt(&config)
 	}
 
-	config.log = el
+	if config.local {
+		if el, ok := logs[name]; ok {
+			config.log = el
+		}
+	}
+
 	return &config
 }
 
@@ -516,7 +525,7 @@ func (u *useOtherConfig) output(level int, v ...interface{}) {
 		if remoteTemplateHandler != nil {
 			body = remoteTemplateHandler.Before(body)
 		}
-		err = mq.DefExchangeDeclare(remoteRabbitMQLog.Exchange, KIND_DIRECT, remoteRabbitMQLog.Durable).
+		err = mq.DefExchangeDeclare(remoteRabbitMQLog.Exchange, KIND_DIRECT, remoteRabbitMQLog.Durable, true).
 			Publish(body, remoteRabbitMQLog.Key)
 		if err != nil {
 			if remoteTemplateHandler != nil {
@@ -631,7 +640,7 @@ func RemoteLog(t int, v ...interface{}) {
 		if remoteTemplateHandler != nil {
 			body = remoteTemplateHandler.Before(body)
 		}
-		err = mq.DefExchangeDeclare(remoteRabbitMQLog.Exchange, KIND_DIRECT, remoteRabbitMQLog.Durable).
+		err = mq.DefExchangeDeclare(remoteRabbitMQLog.Exchange, KIND_DIRECT, remoteRabbitMQLog.Durable, true).
 			Publish(body, remoteRabbitMQLog.Key)
 		if err != nil {
 			if remoteTemplateHandler != nil {

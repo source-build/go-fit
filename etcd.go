@@ -2,8 +2,11 @@ package fit
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"go.etcd.io/etcd/client/v3"
+	"time"
 )
 
 var client *clientv3.Client
@@ -20,15 +23,18 @@ func InitEtcd(config clientv3.Config) error {
 		return errors.New("instance already exists")
 	}
 
-	newEtcd, err := clientv3.New(config)
+	clientV3, err := clientv3.New(config)
 	if err != nil {
 		return err
 	}
-	client = newEtcd
+	client = clientV3
 	return nil
 }
 
-func NewEtcd(ctx ...context.Context) *EtcdHandle {
+func MainEtcdv3(ctx ...context.Context) (*EtcdHandle, error) {
+	if client == nil {
+		return nil, NewErr("etcd instance not found!")
+	}
 	ctx1 := context.Background()
 	if len(ctx) > 0 {
 		ctx1 = ctx[0]
@@ -36,10 +42,10 @@ func NewEtcd(ctx ...context.Context) *EtcdHandle {
 	return &EtcdHandle{
 		EtcdClient: client,
 		ctx:        ctx1,
-	}
+	}, nil
 }
 
-func GetClientV3() *clientv3.Client {
+func MainEtcdClientv3() *clientv3.Client {
 	return client
 }
 
@@ -139,6 +145,7 @@ func (e *EtcdHandle) WatchPrefix() func(prefix string, data chan *clientv3.Event
 					data <- event
 				}
 			case <-e.ctx.Done():
+				fmt.Println("收到")
 				close(data)
 				return
 			}
@@ -192,4 +199,35 @@ func ExtractWatchChanValUtil(resp clientv3.WatchResponse) []byte {
 		break
 	}
 	return value
+}
+
+func ExtractValAndToMap(resp *clientv3.GetResponse) (result map[string]any, err error) {
+	var value string
+	result = make(map[string]any)
+	for _, kv := range resp.Kvs {
+		value = string(kv.Value)
+		break
+	}
+	err = json.Unmarshal([]byte(value), &result)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func PingEtcd(ctx ...context.Context) error {
+	var rootCtx context.Context
+	if len(ctx) > 0 {
+		rootCtx = ctx[0]
+	} else {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+		defer cancel()
+		rootCtx = ctx
+	}
+
+	_, err := MainEtcdClientv3().Get(rootCtx, "/")
+	if err != nil {
+		return err
+	}
+	return nil
 }

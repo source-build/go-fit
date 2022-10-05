@@ -20,6 +20,7 @@ package main
 import (
 	"fmt"
 	"github.com/source-build/go-fit"
+	"log"
 )
 
 type remoteLogHook struct {
@@ -37,27 +38,30 @@ func main() {
 	/* 配置 */
 	//开启本地日志
 	fit.SetLocalLogConfig(fit.LogEntity{
-		LogPath:  "./logs",    //日志路径，默认为根目录下的logs
-		FileName: "diagnosis", //日志文件名称
-		//IsDefaultLog: true,        //默认日志，当直接调用Error、Info时会选择默认的
+		LogPath:      "logs",      //日志文件存放的路径，默认为根目录下的logs
+		FileName:     "diagnosis", //日志文件名称
+		IsDefaultLog: true,        //默认日志，当直接调用Error、Info时会选择默认的
 	}, fit.LogEntity{
-		LogPath:  "./logs", //日志路径，默认为根目录下的logs
-		FileName: "track",  //日志文件名称
+		LogPath:  "logs",
+		FileName: "track",
+	}, fit.LogEntity{
+		LogPath:  "logs",
+		FileName: "mysql",
 	})
-	//设置堆栈错误信息长度(默认300)，错误信息key应为err
+	////设置堆栈错误信息长度(默认300)，错误信息key应为err
 	fit.SetLogStackLength(100)
 	//开启控制台输出
 	fit.SetOutputToConsole(true)
 
-	//开启默认的远程日志，这里使用rabbitMQ并使用路由模式
+	////开启远程日志，这里使用rabbitMQ并使用路由模式，消息会原样发送
 	fit.SetMqURL("amqp://guest:guest@127.0.0.1:5672")
-	fit.SetRemoteRabbitMQLog(&fit.RemoteRabbitMQLog{
+	fit.SetRemoteRabbitMQLog(&fit.RemoteRabbitMQLog{ //
 		Exchange: "abnormalHandle", //交换机名称
 		Key:      "error",          //key，与此名称绑定的队列才能消费消息
 		Durable:  true,             //交换机持久化
 	})
 
-	//如果你不想使用默认的本地日志，或自己处理错误，需要的时候才写入，那就使用指定的实例日志
+	//如果你想使用指定
 	//参数1: 日志文件名称，也就是 开启本地日志 的FileName字段
 	//参数2: 配置
 	//	fit.UseConsole() 输出到控制台
@@ -65,7 +69,7 @@ func main() {
 	//	fit.UseRemote()  输出到远程mq
 	//  fit.UseReportCaller(true) 记录文件名，行数
 	//  fit.UseSetSkip(2) 上溯的栈帧数,输出发生错误的位置，包括文件名和行数，参数为 栈帧数。fit.UseReportCaller(true) 时有效
-	fit.UseOtherLog("track", fit.UseLocal()).Error("这是信息消息")
+	fit.OtherLog("track", fit.UseLocal()).Error("这是信息消息")
 
 	//如果你只想写入本地而且不受全局配置的影响，可以使用以下方式，不过还是需要开启本地日志
 	//如果有参数，则会使用指定的日志实例写入，需要在 开启本地日志
@@ -80,13 +84,21 @@ func main() {
 	fit.AddRemoteLogHook(new(remoteLogHook))
 
 	//自定义错误处理
-	c := fit.CustomizeLog()
-	go func(c <-chan string) {
+	go func() {
+		c := fit.CustomizeLog()
 		defer fit.CloseCustomizeLog()
 		for msg := range c {
 			fmt.Println("错误信息：", msg)
 		}
-	}(c)
+	}()
+
+	//获取logrus实例
+	fit.GetLogInstances()
+	instance, ok := fit.GetLogInstance("mysql")
+	if !ok {
+		log.Fatalln("not find")
+	}
+	instance.Error()
 
 	//快捷使用
 	fit.Error()   //错误
@@ -163,7 +175,7 @@ func main() {
 	}
 
 	//连接redis单节点
-	err = fit.NewDefaultRedisClient("127.0.0.1:6380", "", "", 0)
+	err = fit.NewRedisDefConnect("127.0.0.1:6380", "", "", 0)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -211,7 +223,7 @@ func main() {
 		fit.RedisClient(fit.WithGinTraceCtx(c)).Get("KKKK")
 		c.String(http.StatusOK, "OK")
 	})
-	
+
 	/* 记录第三方请求信息 */
 	g.GET("/thirdParty", func(c *gin.Context) {
 		trace, _ := fit.GetGinTraceCtx(c)
@@ -234,138 +246,139 @@ func main() {
 
 ```go
 func main() {
-	/* 开启本地日志 */
-	fit.SetLocalLogConfig(fit.LogEntity{
-		LogPath:      "logs",          //修改日志路径，默认为根目录下的logs
-		FileName:     "track",           //日志文件名称
-		Formatter:    fit.JSONFormatter, //格式化方式,不传默认json。可选text(fit.TextFormatter)|json(fit.JSONFormatter)
-		IsDefaultLog: true,
-		ReportCaller: true, //输出文件名 行数, IsDefaultLog = true 时生效
-	})
+/* 开启本地日志 */
+fit.SetLocalLogConfig(fit.LogEntity{
+LogPath:      "logs",  //修改日志路径，默认为根目录下的logs
+FileName:     "track", //日志文件名称
+Formatter:    fit.JSONFormatter, //格式化方式,不传默认json。可选text(fit.TextFormatter)|json(fit.JSONFormatter)
+IsDefaultLog: true,
+ReportCaller: true, //输出文件名 行数, IsDefaultLog = true 时生效
+})
 
-	/* ====== 创建 ====== */
-	//参数: 需要写入到的日志文件名称，需要预先配置好, 说白了就是上面的 FileName 字段
-	//如果不传则不写入本地日志
-	gt := fit.NewLinkTrace("track")
-	//写入方式：LOCAL 本地 REMOTE 远程 CONSOLE 终端。NewGinTrace 有参数时才生效
-	gt.SetRecordMode("LOCAL")
-	//设置服务名称
-	gt.SetServiceName("user")
-	//设置服务类型，如api服务、rpc服务等
-	gt.SetServiceType("rpc")
-	
-	var opts []grpc.ServerOption
+/* ====== 创建 ====== */
+//参数: 需要写入到的日志文件名称，需要预先配置好, 说白了就是上面的 FileName 字段
+//如果不传则不写入本地日志
+gt := fit.NewLinkTrace("track")
+//写入方式：LOCAL 本地 REMOTE 远程 CONSOLE 终端。NewGinTrace 有参数时才生效
+gt.SetRecordMode("LOCAL")
+//设置服务名称
+gt.SetServiceName("user")
+//设置服务类型，如api服务、rpc服务等
+gt.SetServiceType("rpc")
 
-	//日志收集
-	//由于只能设置一个拦截器，如果你也想使用拦截器，则需要添加一个hook
-	//gt.GrpcHook(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-	//	//如果不调用handler，将不会继续往下处理
-	//	fmt.Println("请求来了")
-	//	res, err := handler(ctx, req)
-	//	return res, err
-	//})
-	//注意：这是一元拦截器
-	opts = append(opts, grpc.UnaryInterceptor(gt.GrpcServerInterceptor()))
+var opts []grpc.ServerOption
 
-	rpcServer := grpc.NewServer(opts...)
-	pb.RegisterPhoneLoginSmsVerCodeServer(rpcServer, new(phoneSms))
+//日志收集
+//由于只能设置一个拦截器，如果你也想使用拦截器，则需要添加一个hook
+//gt.GrpcHook(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+//	//如果不调用handler，将不会继续往下处理
+//	fmt.Println("请求来了")
+//	res, err := handler(ctx, req)
+//	return res, err
+//})
+//注意：这是一元拦截器
+opts = append(opts, grpc.UnaryInterceptor(gt.GrpcServerInterceptor()))
 
-	quit := make(chan os.Signal, 1)
-	go func() {
-		signal.Notify(quit, syscall.SIGHUP, syscall.SIGINT, syscall.SIGKILL)
-		if err := rpcServer.Serve(listen); err != nil {
-			log.Fatalln(err)
-		}
-	}()
-	<-quit
-	fmt.Println("service close!")
+rpcServer := grpc.NewServer(opts...)
+pb.RegisterPhoneLoginSmsVerCodeServer(rpcServer, new(phoneSms))
+
+quit := make(chan os.Signal, 1)
+go func () {
+signal.Notify(quit, syscall.SIGHUP, syscall.SIGINT, syscall.SIGKILL)
+if err := rpcServer.Serve(listen); err != nil {
+log.Fatalln(err)
+}
+}()
+<-quit
+fmt.Println("service close!")
 }
 
 type phoneSms struct {
-	pb.UnimplementedPhoneLoginSmsVerCodeServer
+pb.UnimplementedPhoneLoginSmsVerCodeServer
 }
 
 func (p phoneSms) Send(ctx context.Context, request *pb.SendRequest) (*pb.Response, error) {
-	//获取trace
-	trace, ok := fit.GetTraceCtx(ctx)
-	if ok {
-		fmt.Println(trace)
-	}
-	return &pb.Response{
-		Msg:    "OK",
-		Code:   0,
-		Result: "OK",
-	}, nil
+//获取trace
+trace, ok := fit.GetTraceCtx(ctx)
+if ok {
+fmt.Println(trace)
+}
+return &pb.Response{
+Msg:    "OK",
+Code:   0,
+Result: "OK",
+}, nil
 }
 ```
 
 ##### 客户端
+
 ```go
 func main() {
-	//连接etcd
-	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{"127.0.0.1:2479"},
-		DialTimeout: time.Second * 5,
-	})
-	if err != nil {
-		log.Fatalln(err)
-	}
+//连接etcd
+client, err := clientv3.New(clientv3.Config{
+Endpoints:   []string{"127.0.0.1:2479"},
+DialTimeout: time.Second * 5,
+})
+if err != nil {
+log.Fatalln(err)
+}
 
-	/* ====== 创建 ====== */
-	//参数: 需要写入到的日志文件名称，需要预先配置好, 说白了就是上面的 FileName 字段
-	//如果不传则不写入本地日志
-	gt := fit.NewLinkTrace()
-	//写入方式：LOCAL 本地 REMOTE 远程 CONSOLE 终端。NewGinTrace 有参数时才生效
-	//gt.SetRecordMode("LOCAL")
-	//设置服务名称
-	gt.SetServiceName("user")
-	//设置服务类型，如api服务、rpc服务等
-	gt.SetServiceType("api")
-	
-	//初始化客户端解析器
-	//发起grpc请求时会自动解析并使用负载均衡策略
-	err = fit.NewGrpcClientBuilder(fit.GrpcBuilderConfig{
-		EtcdClient:         client,
-		ClientCertPath:     "./keys/client.crt",
-		ClientKeyPath:      "./keys/client.key",
-		RootCrtPath:        "./keys/ca.crt",
-		ServerNameOverride: "SourceBuild.cn",
-	})
-	if err != nil {
-		log.Fatalln(err)
-	}
-	
-	g := gin.New()
-	g.Use(gt.GinTraceHandler())
+/* ====== 创建 ====== */
+//参数: 需要写入到的日志文件名称，需要预先配置好, 说白了就是上面的 FileName 字段
+//如果不传则不写入本地日志
+gt := fit.NewLinkTrace()
+//写入方式：LOCAL 本地 REMOTE 远程 CONSOLE 终端。NewGinTrace 有参数时才生效
+//gt.SetRecordMode("LOCAL")
+//设置服务名称
+gt.SetServiceName("user")
+//设置服务类型，如api服务、rpc服务等
+gt.SetServiceType("api")
 
-	g.GET("/", func(c *gin.Context) {
-		//传递fit.WithContext()会在拦截器中记录操作信息，耗时等,
-		conn, err := fit.GrpcDial("/serves/rpc/dpp",
-			fit.Attempts(5),
-			fit.WithContext(),
-		)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		defer conn.Close()
+//初始化客户端解析器
+//发起grpc请求时会自动解析并使用负载均衡策略
+err = fit.NewGrpcClientBuilder(fit.GrpcBuilderConfig{
+EtcdClient:         client,
+ClientCertPath:     "./keys/client.crt",
+ClientKeyPath:      "./keys/client.key",
+RootCrtPath:        "./keys/ca.crt",
+ServerNameOverride: "SourceBuild.cn",
+})
+if err != nil {
+log.Fatalln(err)
+}
 
-		resp := pb.NewPhoneLoginSmsVerCodeClient(conn)
-		//记录rpc调用信息，需要传递context
-		res, err := resp.Send(c, &pb.SendRequest{
-			PhoneCode:  "OK",
-			Expired:    200,
-			TemplateId: 0,
-		})
-		if err != nil {
-			c.String(http.StatusOK, "ERR")
-			return
-		}
-		
-		fmt.Println(res.Msg)
-		
-		c.String(http.StatusOK, "OK")
-	})
-	g.Run(":8005")	
+g := gin.New()
+g.Use(gt.GinTraceHandler())
+
+g.GET("/", func (c *gin.Context) {
+//传递fit.WithContext()会在拦截器中记录操作信息，耗时等,
+conn, err := fit.GrpcDial("/serves/rpc/dpp",
+fit.Attempts(5),
+fit.WithContext(),
+)
+if err != nil {
+log.Fatalln(err)
+}
+defer conn.Close()
+
+resp := pb.NewPhoneLoginSmsVerCodeClient(conn)
+//记录rpc调用信息，需要传递context
+res, err := resp.Send(c, &pb.SendRequest{
+PhoneCode:  "OK",
+Expired:    200,
+TemplateId: 0,
+})
+if err != nil {
+c.String(http.StatusOK, "ERR")
+return
+}
+
+fmt.Println(res.Msg)
+
+c.String(http.StatusOK, "OK")
+})
+g.Run(":8005")
 }
 ```
 
@@ -649,6 +662,146 @@ func main() {
 }
 ```
 
+### 监控
+
+生产者代码
+
+```go
+package main
+
+import (
+	"context"
+	"github.com/source-build/go-fit"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"log"
+	"time"
+)
+
+func main() {
+	//连接redis单节点
+	err := fit.NewRedisDefConnect("192.168.1.1:6380", "", "", 0)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer fit.CloseRedis()
+
+	err = fit.InitEtcd(clientv3.Config{
+		Endpoints:   []string{"127.0.0.1:2479"},
+		DialTimeout: time.Second * 10,
+	})
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	fit.SetMqURL("amqp://guest:guest@192.168.1.1:5672")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	//使用
+	err = fit.ServiceMonitorTask(&fit.ServiceMonitorOption{
+		Context:               ctx,
+		ServiceNode:           "ikkl",             //节点名称
+		ServiceName:           "user",             //服务名称
+		ServiceType:           "api",              //服务类型
+		ServiceAddress:        "192.168.1.1:6004", //服务地址
+		SystemVersion:         "1.0.1",            //系统版本
+		RecordRedisClientInfo: true,               //是否返回redisClient
+		RecordRedisStatsInfo:  true,               //是否返回redis统计信息
+	})
+	if err != nil {
+		log.Fatalln(err)
+	}
+	select {}
+}
+```
+
+消费端代码
+>MQ
+```go
+//设置mq地址
+	fit.SetMqURL("amqp://guest:guest@192.168.1.1:5672")
+	//新建实例
+	mq, err := fit.NewRabbitMQ()
+	if err != nil {
+		log.Fatal(err)
+	}
+	//释放资源,建议NewRabbitMQ获取实例后 配合defer使用
+	defer mq.Close()
+
+	//创建交换器
+	ex := mq.DefExchangeDeclare("service_monitor", fit.KIND_DIRECT, false, true)
+	//随机生成队列名
+	msgs, err := ex.QueueDeclare("", false, true, false, false, nil).
+		ReceiveRouting("monitor") //路由key
+	if err != nil {
+		log.Fatalln(err)
+	}
+	for msg := range msgs {
+		fmt.Println("message:", string(msg.Body))
+		//主动应答
+		err := msg.Ack(true)
+	}
+```
+>HTTP
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/gin-gonic/gin"
+	"github.com/source-build/go-fit"
+	"net/http"
+)
+
+func main() {
+	g := gin.New()
+	g.POST("/msg", func(c *gin.Context) {
+		var body fit.MessageBody
+		err := c.ShouldBindJSON(&body)
+		if err != nil {
+			c.String(http.StatusBadRequest, "ERR")
+			return
+		}
+		fmt.Printf("%+v\n", body)
+	})
+	g.Run(":8008")
+}
+```
+etcd中的key格式示例
+> api/user/ikkl 加上后面的节点名称（ikkl）用于指定那个服务采集机器负载信息
+etcd中的value配置示例
+```json
+{  
+  stage: "INIT", //阶段，可选值 INIT、WORK
+  //当etcd服务终止或找不到etcd存活时，将自动退出任务，如果为false，则会阻塞一直等到etcd服务恢复后继续执行任务。 
+  downtimeAutoQuit:true, 
+  returnWorkTask: true, //是否返回当前工作的协程数量
+  returnMem: true, //是否返回内存信息
+  returnCpu: true, //是否返回CPU信息
+  returnIoCount: true, //是否获取网络读写字节／包的个数
+  subType: "", //接收类型 HTTP、MQ
+  subHttpUrl: "", //http url，默认post方式，subType = HTTP生效
+  subHttpToken: "", //http 请求时需要携带的token，如果subHttpHeader存在,则该字段会被覆盖,subType = HTTP生效
+  subHttpHeader: "", //subType = HTTP生效
+  mqWorkType: "", //simple 简单模式、 work 工作模式、 publish 发布订阅模式 routing 模式
+  mqDeclareName: "", //声明时的队列名称，为空则随机生成
+  mqDeclareDurable: false, //队列是否需要持久化，不持久化重启mq将失效。
+  mqAutoDelete: false, //自动删除？
+  mqExchangeName: "", //声明时的交换机名称，注意：simple、work模式时不需要填
+  mqExchangeDurable: false, //交换机是否需要持久化，不持久化重启mq将失效。
+  // 当mqWorkType=routing时，需要设置此字段接收时才会与路由精确匹配上，
+  //如果为空则默认路由名称为 monitor。
+  mqRoutingKey:"", 
+  duration:3, //多久发送一次，默认5s，单位s
+  //最大重试连接次数，当etcd服务不可用时，会进行重试.
+  //注意，这里重试指的是etcd。
+  retryCount:5,
+};
+```
+>注意:
+如果使用http的方式接收，响应状态码!=200时，会重试请求最多三次！
+INIT：初始状态、 WORK：工作状态
+首次应为INIT，INIT阶段return*字段不生效，也就是说，stage=INIT时，不需要return*开头的字段，随后服务监听接收到该值后，假设你选择接收类型为mq，那么会向mq发送一条包含服务所在的机器信息，这样就能拿到服务所在的机器唯一id，最后你再确定由哪一台机器负责采集负载信息。一些情况下同一台机器中会部署多个服务集群等，如果每个服务都要采集机器信息，这是没有必要的，因为他们都在同一台机器上。
+
 ### rabbitMQ
 
 #### 基本配置
@@ -686,12 +839,12 @@ mq.SetRabbitMqErrLogHandle(fit.ALL)
 
 ```go
 func main() {
-//使用默认声明队列。参数说明: name 队列名称 durable 是否持久化
-mq.DefQueueDeclare(name, durable)
+//使用默认声明队列。参数说明: name 队列名称 durable 是否持久化 autoDelete 是否自动删除 
+mq.DefQueueDeclare(name, durable, autoDelete)
 //声明队列。跟官方的参数一致，有点多，自己点进去看😊
 mq.QueueDeclare()
 //注意：name 为空则随机生成
-//小贴士: 声明队列支持链式调用,像这样：mq.DefQueueDeclare("logs", false).PublishSimple()
+//小贴士: 声明队列支持链式调用,像这样：mq.DefQueueDeclare("logs", false,false).PublishSimple()
 }
 ```
 
@@ -700,7 +853,7 @@ mq.QueueDeclare()
 ```go
 func main() {
 //默认交换机。参数 name:名称 kind:交换器模式｜可选值 fit.KIND_* durable 是否持久化	
-mq.DefExchangeDeclare(name, kind, durable)
+mq.DefExchangeDeclare(name, kind, durable,autoDel)
 //跟官方的参数一致，有点多，自己点进去看😊
 mq.ExchangeDeclare()
 // 小贴士: 同样支持链式调用,像这样：mq.DefExchangeDeclare().PublishPub()
@@ -715,7 +868,7 @@ mq.ExchangeDeclare()
 func main() {
 mq, _ := fit.NewRabbitMQ()
 //-------------------- 生产者 --------------------
-err = mq.DefQueueDeclare("logs", false).PublishSimple("这是内容")
+err = mq.DefQueueDeclare("logs", false,false).PublishSimple("这是内容")
 if err != nil {
 fmt.Println(err)
 }
@@ -724,7 +877,7 @@ fmt.Println("发送成功！")
 //-------------------- 消费者 --------------------
 // mq.ConsumeSimple() 使用默认配置创建消费者
 // mq.ConsumeSimple(fit.ConsumeConfig{}) 完整配置创建消费者
-simple, err := mq.ConsumeSimple()
+simple, err := mq.DefQueueDeclare("logs", false, true).ConsumeSimple()
 if err != nil {
 log.Fatal(err)
 }
@@ -748,7 +901,7 @@ log.Fatal("主动应答失败:", err)
 func main() {
 mq, _ := fit.NewRabbitMQ()
 //-------------------- 生产者 --------------------
-err = mq.DefQueueDeclare("logs", false).PublishSimple("这是内容")
+err = mq.DefQueueDeclare("logs", false,false).PublishSimple("这是内容")
 if err != nil {
 fmt.Println(err)
 }
@@ -757,7 +910,7 @@ fmt.Println("发送成功！")
 //-------------------- 消费者 --------------------
 // mq.ConsumeSimple() 使用默认配置创建消费者
 // mq.ConsumeSimple(fit.ConsumeConfig{}) 完整配置创建消费者
-simple, err := mq.ConsumeSimple()
+simple, err := mq.DefQueueDeclare("logs", false, true).ConsumeSimple()
 if err != nil {
 log.Fatal(err)
 }
@@ -783,7 +936,7 @@ func main() {
 mq, _ := fit.NewRabbitMQ()
 //-------------------- 生产者(发布) --------------------
 //声明交换机，fit.KIND_FANOUT 表示广播到所有与此绑定的队列
-err = mq.DefExchangeDeclare("exchange_test1", fit.KIND_FANOUT, false).PublishPub("这是新的消息") //将消息发送到 exchange_test1 交换机上
+err = mq.DefExchangeDeclare("exchange_test1", fit.KIND_FANOUT, false, false).PublishPub("这是新的消息") //将消息发送到 exchange_test1 交换机上
 if err != nil {
 log.Fatal(err)
 }
@@ -791,8 +944,8 @@ fmt.Println("发布成功")
 
 //-------------------- 消费者(订阅) --------------------
 //ReceiveSub()方法参数为空则使用默认配置的消费者
-msgs, err := mq.DefQueueDeclare("", false).
-DefExchangeDeclare("exchange_test1", fit.KIND_FANOUT, false).ReceiveSub()
+msgs, err := mq.DefQueueDeclare("", false,false).
+DefExchangeDeclare("exchange_test1", fit.KIND_FANOUT, false, false).ReceiveSub()
 if err != nil {
 log.Fatal(err)
 }
@@ -812,7 +965,7 @@ func main() {
 mq, _ := fit.NewRabbitMQ()
 //-------------------- 生产者 --------------------
 //声明交换机。fit.KIND_DIRECT 交换机将会对binding key和routing key进行精确匹配，从而确定消息该分发到哪个队列
-mq = mq.DefExchangeDeclare("exchange_test2", fit.KIND_DIRECT, true)
+mq = mq.DefExchangeDeclare("exchange_test2", fit.KIND_DIRECT, true, false)
 //将消息发送到 exchange_test2 交换机上
 if err := mq.Publish("这是新的消息", "error"); err != nil {
 log.Fatal(err)
@@ -821,7 +974,7 @@ fmt.Println("发布成功")
 
 //-------------------- 消费者 --------------------
 //创建交换机
-ex := mq.DefExchangeDeclare("exchange_test2", fit.KIND_DIRECT, true)
+ex := mq.DefExchangeDeclare("exchange_test2", fit.KIND_DIRECT, true, false)
 //随机生成队列名
 msgs, err = ex.QueueDeclare("", false, false, true, false, nil).
 ReceiveRouting("error") //路由key
@@ -851,7 +1004,7 @@ func main() {
 mq, _ := fit.NewRabbitMQ()
 //-------------------- 生产者 --------------------
 //声明交换机。fit.KIND_DIRECT 交换机将会对binding key和routing key进行精确匹配，从而确定消息该分发到哪个队列
-mq = mq.DefExchangeDeclare("exchange_test3", fit.KIND_TOPIC, true)
+mq = mq.DefExchangeDeclare("exchange_test3", fit.KIND_TOPIC, true, false)
 //将消息发送到 exchange_test3 交换机上,注意通配符说明
 //如：hello.* == hello.world | 匹配多个单词: hello.# == hello.world.one
 if err := mq.PublishTopic("这是新的消息6666", "hello.*"); err != nil {
@@ -861,7 +1014,7 @@ fmt.Println("发布成功")
 
 //-------------------- 消费者 --------------------
 //创建交换机
-ex := mq.DefExchangeDeclare("exchange_test2", fit.KIND_TOPIC, true)
+ex := mq.DefExchangeDeclare("exchange_test2", fit.KIND_TOPIC, true, false)
 //随机生成队列名
 msgs, err := ex.QueueDeclare("", false, false, true, false, nil).
 ReceiveTopic("hello.world")
@@ -889,6 +1042,7 @@ log.Fatal("主动应答失败:", err)
 #### 客户端
 
 ```go
+func main() {
 // ClientInterceptor 客户端拦截器
 func ClientInterceptor(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 start := time.Now()
@@ -972,6 +1126,7 @@ log.Fatalln(err)
 }
 
 fmt.Println(res.Code, res.Msg)
+}
 }
 ```
 
@@ -1347,64 +1502,69 @@ e.Exit()
 ```go
 package main
 
+import (
+	"github.com/source-build/go-fit"
+	"log"
+)
+
 func main() {
 	//连接redis单节点
-	err := fit.NewDefaultRedisClient("127.0.0.1:6379", "", "", 0)
+	err := fit.NewRedisDefConnect("127.0.0.1:6379", "", "", 0)
 	if err != nil {
 		log.Fatalln(err)
 	}
 	defer fit.CloseRedis()
 
-	//连接redis单节点，自定义配置
-	err = fit.NewRedisClient(redis.Options{
-		Addr:               "",
-		Username:           "",
-		Password:           "",
-		DB:                 0,
-		MinIdleConns:       0,
-		MaxConnAge:         0,
-		PoolTimeout:        0,
-		IdleTimeout:        0,
-		IdleCheckFrequency: 0,
-		TLSConfig:          nil,
-		Limiter:            nil,
-	})
-	if err != nil {
-		log.Fatalln(err)
-	}
-	defer fit.CloseRedis()
-
-	//连接redis集群，默认0db
-	err := fit.NewDefaultRedisCluster([]string{"127.0.0.1:6379", "127.0.0.1:6379"}, "", "")
-
-	//连接redis集群，自定义配置
-	err := fit.NewRedisCluster(redis.ClusterOptions{
-		Addrs:              nil,
-		NewClient:          nil,
-		MaxRedirects:       0,
-		ReadOnly:           false,
-		RouteByLatency:     false,
-		RouteRandomly:      false,
-		ClusterSlots:       nil,
-		Dialer:             nil,
-		OnConnect:          nil,
-		Username:           "",
-		Password:           "",
-		MaxRetries:         0,
-		MinRetryBackoff:    0,
-		MaxRetryBackoff:    0,
-		DialTimeout:        0,
-		ReadTimeout:        0,
-		WriteTimeout:       0,
-		PoolFIFO:           false,
-		PoolSize:           0,
-		MinIdleConns:       0,
-		MaxConnAge:         0,
-		PoolTimeout:        0,
-		IdleTimeout:        0,
-		IdleCheckFrequency: 0,
-		TLSConfig:          nil,
-	})
+	////连接redis单节点，自定义配置
+	//err = fit.NewRedisConnect(redis.Options{
+	//	Addr:               "",
+	//	Username:           "",
+	//	Password:           "",
+	//	DB:                 0,
+	//	MinIdleConns:       0,
+	//	MaxConnAge:         0,
+	//	PoolTimeout:        0,
+	//	IdleTimeout:        0,
+	//	IdleCheckFrequency: 0,
+	//	TLSConfig:          nil,
+	//	Limiter:            nil,
+	//})
+	//if err != nil {
+	//	log.Fatalln(err)
+	//}
+	//defer fit.CloseRedis()
+	//
+	////连接redis集群，默认0db
+	//err = fit.NewRedisDefConnectCluster([]string{"127.0.0.1:6379", "127.0.0.1:6379"}, "", "")
+	//
+	////连接redis集群，自定义配置
+	//err = fit.NewRedisConnectCluster(redis.ClusterOptions{
+	//	Addrs:              nil,
+	//	NewClient:          nil,
+	//	MaxRedirects:       0,
+	//	ReadOnly:           false,
+	//	RouteByLatency:     false,
+	//	RouteRandomly:      false,
+	//	ClusterSlots:       nil,
+	//	Dialer:             nil,
+	//	OnConnect:          nil,
+	//	Username:           "",
+	//	Password:           "",
+	//	MaxRetries:         0,
+	//	MinRetryBackoff:    0,
+	//	MaxRetryBackoff:    0,
+	//	DialTimeout:        0,
+	//	ReadTimeout:        0,
+	//	WriteTimeout:       0,
+	//	PoolFIFO:           false,
+	//	PoolSize:           0,
+	//	MinIdleConns:       0,
+	//	MaxConnAge:         0,
+	//	PoolTimeout:        0,
+	//	IdleTimeout:        0,
+	//	IdleCheckFrequency: 0,
+	//	TLSConfig:          nil,
+	//})
 
 	/**
 	 * 连接redis方式任意选一种就行，否则优先使用单节点
@@ -1418,72 +1578,99 @@ func main() {
 	  fit.WithGinTraceCtx() 传递gin.context,用于日志收集
 		fit.WithExpire() 设置key过期时间，默认不过期
 	*/
-	instance := fit.RedisClient()
+	instance := fit.MainRedis()
 	//添加hook,GetClient() 获取单节点实例，GetCluster() 获取集群实例，取决于你初始化时用单节点连接还是集群连接
-	instance.GetCluster().AddHook()
+	//instance.GetCluster().AddHook()
+	//获取单节点实例，连接单节点后使用
+	instance.GetNode()
+	//获取集群实例，连接集群后使用
+	instance.GetCluster()
+	//使用，如果你连接单节点，则会使用单节点实例，反之，集群也是同样的；
 	_, err = instance.Set("key", "value")
 	if err != nil {
 		log.Fatalln(err)
 	}
+
 }
 ```
 
 ### mysql
 
 ```go
+package main
+
+import (
+	"github.com/source-build/go-fit"
+	"gorm.io/gorm"
+	"log"
+	"time"
+)
+
 func main() {
-//参数2 传的话会记录当次查询的记录，跟着trace中间件搭配使用
-err := fit.ConnectDefaultConfigMysql(fit.DefaultConfigMysql{
-User: "grxc",
-Pass: "445566",
-IP:   "110.42.184.124",
-Port: "3316",
-DB:   "user",
-}, true)
-if err != nil {
-fit.Fatal("init msql err:" + err.Error())
-}
+	//使用默认的方式连接
+	//参数2 传的话会记录当次查询的记录，跟着trace中间件搭配使用
+	err := fit.NewMysqlDefConnect(fit.DefaultConfigMysql{
+		User: "root",
+		Pass: "123",
+		IP:   "192.168.1.6",
+		Port: "3369",
+		DB:   "foo",
+	}, false)
+	if err != nil {
+		log.Fatalln(err)
+	}
 
-//自定义配置的方式连接
-addr := "root:123@tcp(127.0.0.1:3369)/foo?charset=utf8mb4&parseTime=True&loc=Local"
-pool, err := fit.ConnectMysql(addr, &gorm.Config{}, true)
-if err != nil {
-log.Fatalln(err)
-}
-defer pool.Close()
+	//自定义配置的方式连接
+	addr := "root:123@tcp(127.0.0.1:3369)/foo?charset=utf8mb4&parseTime=True&loc=Local"
+	pool, err := fit.NewMysqlConnect(addr, &gorm.Config{}, true, false)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer pool.Close()
 
-//设置空闲连接池中的最大连接数
-pool.SetMaxIdleConns(10)
-//设置打开数据库连接的最大数量
-pool.SetMaxOpenConns(200)
-//设置连接可复用的最大时间。
-pool.SetConnMaxLifetime(time.Hour)
+	//设置空闲连接池中的最大连接数
+	pool.SetMaxIdleConns(10)
+	//设置打开数据库连接的最大数量
+	pool.SetMaxOpenConns(200)
+	//设置连接可复用的最大时间。
+	pool.SetConnMaxLifetime(time.Hour)
+
+	//使用
+	fit.MainMysql().Create()
 }
 ```
 
 ### etcd
 
 ```go
-//初始化
-err := fit.InitEtcd(clientv3.Config{
-Endpoints:   []string{"127.0.0.1:2379"},
-DialTimeout: 0,
-TLS:         nil,
-Username:    "",
-Password:    "",
-})
-if err != nil {
-log.Fatalln(err)
-}
+package main
 
-//使用，更多方法查看 etcd_util.go
-ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-defer cancel()
-res, err := fit.NewEtcd(ctx).Get("foo")
-if err != nil {
-log.Fatalln(err)
+import (
+	"context"
+	"fmt"
+	"github.com/source-build/go-fit"
+	"go.etcd.io/etcd/client/v3"
+	"log"
+	"time"
+)
+
+func main() {
+	//连接
+	err := fit.InitEtcd(clientv3.Config{
+		Endpoints:   []string{"127.0.0.1:2379"},
+		DialTimeout: time.Second * 5,
+	})
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	//使用
+	res, err := fit.MainEtcdv3().Get("foo")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	fmt.Println(res)
 }
-fmt.Println(res)
 ```
 
 ### 时间操作

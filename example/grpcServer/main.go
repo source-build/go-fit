@@ -62,31 +62,31 @@ func main() {
 		fit.Fatal("create tls failed err:" + err.Error())
 	}
 
-	/* 开启本地日志 */
-	fit.SetLocalLogConfig(fit.LogEntity{
-		LogPath:      "./logs",          //修改日志路径，默认为根目录下的logs
-		FileName:     "track",           //日志文件名称
-		Formatter:    fit.JSONFormatter, //格式化方式,不传默认json。可选text(fit.TextFormatter)|json(fit.JSONFormatter)
-		IsDefaultLog: true,
-		ReportCaller: true, //输出文件名 行数, IsDefaultLog = true 时生效
-	})
-
-	/* ====== 创建 ====== */
-	//参数: 需要写入到的日志文件名称，需要预先配置好, 说白了就是上面的 FileName 字段
-	//如果不传则不写入本地日志
-	gt := fit.NewLinkTrace("track")
-	//写入方式：LOCAL 本地 REMOTE 远程 CONSOLE 终端。NewGinTrace 有参数时才生效
-	gt.SetRecordMode("LOCAL")
-	//设置服务名称
-	gt.SetServiceName("user")
-	//设置服务类型，如api服务、rpc服务等
-	gt.SetServiceType("rpc")
-
+	///* 开启本地日志 */
+	//fit.SetLocalLogConfig(fit.LogEntity{
+	//	LogPath:      "./logs",          //修改日志路径，默认为根目录下的logs
+	//	FileName:     "track",           //日志文件名称
+	//	Formatter:    fit.JSONFormatter, //格式化方式,不传默认json。可选text(fit.TextFormatter)|json(fit.JSONFormatter)
+	//	IsDefaultLog: true,
+	//	ReportCaller: true, //输出文件名 行数, IsDefaultLog = true 时生效
+	//})
+	//
+	///* ====== 创建 ====== */
+	////参数: 需要写入到的日志文件名称，需要预先配置好, 说白了就是上面的 FileName 字段
+	////如果不传则不写入本地日志
+	//gt := fit.NewLinkTrace("track")
+	////写入方式：LOCAL 本地 REMOTE 远程 CONSOLE 终端。NewGinTrace 有参数时才生效
+	//gt.SetRecordMode("LOCAL")
+	////设置服务名称
+	//gt.SetServiceName("user")
+	////设置服务类型，如api服务、rpc服务等
+	//gt.SetServiceType("rpc")
+	//
 	var opts []grpc.ServerOption
-
+	//
 	opts = append(opts, grpc.Creds(cred))
 
-	//日志收集
+	//日志收集******
 	//由于只能设置一个拦截器，如果你也想使用拦截器，则需要添加一个hook
 	//gt.GrpcHook(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 	//	//如果不调用handler，将不会继续往下处理
@@ -95,7 +95,8 @@ func main() {
 	//	return res, err
 	//})
 	//注意：这是一元拦截器
-	opts = append(opts, grpc.UnaryInterceptor(gt.GrpcServerInterceptor()))
+	//****
+	//opts = append(opts, grpc.UnaryInterceptor(gt.GrpcServerInterceptor()))
 
 	rpcServer := grpc.NewServer(opts...)
 
@@ -116,7 +117,7 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	go func() {
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-		fmt.Println("service start success!!!")
+		fmt.Println("服务启动成功!")
 		if err := rpcServer.Serve(listen); err != nil {
 			log.Fatalln(err)
 		}

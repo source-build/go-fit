@@ -72,7 +72,7 @@ type RedisOption struct {
 
 type RedisOptionFunc func(*RedisOption)
 
-func RedisClient(opts ...RedisOptionFunc) *RedisOption {
+func MainRedis(opts ...RedisOptionFunc) *RedisOption {
 	option := &RedisOption{}
 	option.timeout = time.Second * 10
 	for _, opt := range opts {
@@ -81,7 +81,7 @@ func RedisClient(opts ...RedisOptionFunc) *RedisOption {
 	return option
 }
 
-func NewDefaultRedisClient(addr, username, password string, db int) error {
+func NewRedisDefConnect(addr, username, password string, db int) error {
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     addr,
 		Username: username,
@@ -100,7 +100,7 @@ func NewDefaultRedisClient(addr, username, password string, db int) error {
 	return nil
 }
 
-func NewRedisClient(config redis.Options) error {
+func NewRedisConnect(config redis.Options) error {
 	rdb := redis.NewClient(&config)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
@@ -114,9 +114,8 @@ func NewRedisClient(config redis.Options) error {
 	return nil
 }
 
-func NewDefaultRedisCluster(addr []string, username, password string) error {
+func NewRedisDefConnectCluster(addr []string, username, password string) error {
 	db := redis.NewClusterClient(&redis.ClusterOptions{
-		//-------------------------------------------------------------------------------------------
 		//集群相关的参数
 		//集群节点地址，理论上只要填一个可用的节点客户端就可以自动获取到集群的所有节点信息。但是最好多填一些节点以增加容灾能力，因为只填一个节点的话，如果这个节点出现了异常情况，则Go应用程序在启动过程中无法获取到集群信息。
 		Addrs: addr,
@@ -137,7 +136,6 @@ func NewDefaultRedisCluster(addr []string, username, password string) error {
 		//钩子函数，当一个新节点创建时调用，传入的参数是新建的redis.Client
 		//OnNewNode: func(*Client) {},
 
-		//------------------------------------------------------------------------------------------------------
 		//ClusterClient管理着一组redis.Client,下面的参数和非集群模式下的redis.Options参数一致，但默认值有差别。
 		//初始化时，ClusterClient会把下列参数传递给每一个redis.Client
 
@@ -183,7 +181,7 @@ func NewDefaultRedisCluster(addr []string, username, password string) error {
 	return nil
 }
 
-func NewRedisCluster(config redis.ClusterOptions) error {
+func NewRedisConnectCluster(config redis.ClusterOptions) error {
 	db := redis.NewClusterClient(&config)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
@@ -255,7 +253,7 @@ func WithGinTraceCtx(g *gin.Context) RedisOptionFunc {
 	}
 }
 
-func (r *RedisOption) GetClient() *redis.Client {
+func (r *RedisOption) GetNode() *redis.Client {
 	return rClient
 }
 

@@ -13,7 +13,7 @@ type MyHandler struct {
 }
 
 func (m *MyHandler) HandleMessage(message *nsq.Message) error {
-	fmt.Println("来消息了", string(message.Body))
+	fmt.Println(string(message.Body))
 	return nil
 }
 

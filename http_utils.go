@@ -35,6 +35,11 @@ const (
 	HandleOk  = "操作成功"
 )
 
+const (
+	TypeClientErr = iota
+	TypeServerErr
+)
+
 func NewErr(err string) error {
 	return errors.New(err)
 }
@@ -50,8 +55,11 @@ type ResponseOK struct {
 }
 
 type ResponseErr struct {
-	Code int    `json:"code"`
-	Msg  string `json:"msg"`
+	//ErrType Mainly divided into client errors and server errors
+	ErrType int    `json:"-"`
+	Code    int    `json:"code"`
+	ErrMsg  string `json:"err_msg"`
+	Result  any    `json:"result"`
 }
 
 /**
@@ -61,14 +69,30 @@ type ResponseErr struct {
 // SvInternalErr http response handler for service internal error,
 // corresponding http status code is 500
 // for example,db query failed
-func SvInternalErr(msg string, err error) (ResponseErr, error) {
-	return ResponseErr{Code: StatusSInternalErr, Msg: msg}, err
+func SvInternalErr(code int, msg string, err error) (ResponseErr, error) {
+	return ResponseErr{Code: code, ErrMsg: msg, ErrType: TypeServerErr}, err
 }
 
-// ClientLogicErr http response handler for client logic error,
+func SvInternalErrResult(code int, msg string, result any, err error) (ResponseErr, error) {
+	return ResponseErr{Code: code, ErrMsg: msg, Result: result, ErrType: TypeServerErr}, err
+}
+
+// ClientErr ClientLogicErr http response handler for client logic error,
 // corresponding http status code is 400
-func ClientLogicErr(msg string, err error) (ResponseErr, error) {
-	return ResponseErr{Code: StatusCErr, Msg: msg}, err
+func ClientErr(code int, msg string, err error) (ResponseErr, error) {
+	return ResponseErr{Code: code, ErrMsg: msg, ErrType: TypeClientErr}, err
+}
+
+func ClientErrResult(code int, msg string, result any, err error) (ResponseErr, error) {
+	return ResponseErr{Code: code, ErrMsg: msg, Result: result, ErrType: TypeClientErr}, err
+}
+
+func JSON(c *gin.Context, responseBody any, err error) {
+	if err != nil {
+		ErrJson(c, responseBody)
+	} else {
+		OkJson(c, responseBody)
+	}
 }
 
 // OkJson response success
@@ -79,25 +103,25 @@ func OkJson(c *gin.Context, response interface{}) {
 // ErrJson client error
 func ErrJson(c *gin.Context, response interface{}) {
 	var code int
-	switch response.(ResponseErr).Code {
-	case StatusCErr:
+	switch response.(ResponseErr).ErrType {
+	case TypeClientErr:
 		code = http.StatusBadRequest
-	case StatusSInternalErr:
+	case TypeServerErr:
 		code = http.StatusInternalServerError
 	}
 	c.JSON(code, response)
 }
 
-func OKString(c *gin.Context, format string, response interface{}) {
+func OkString(c *gin.Context, format string, response interface{}) {
 	c.String(http.StatusOK, format, response)
 }
 
 func ErrString(c *gin.Context, format string, response interface{}) {
 	var code int
 	switch response.(ResponseErr).Code {
-	case StatusCErr:
+	case TypeClientErr:
 		code = http.StatusBadRequest
-	case StatusSInternalErr:
+	case TypeServerErr:
 		code = http.StatusInternalServerError
 	}
 	c.String(code, format, response)

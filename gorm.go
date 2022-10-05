@@ -19,7 +19,7 @@ type DefaultConfigMysql struct {
 	DB   string
 }
 
-func ConnectDefaultConfigMysql(config DefaultConfigMysql, useTrace bool) error {
+func NewMysqlDefConnect(config DefaultConfigMysql, useTrace bool) error {
 	dsn := fmt.Sprintf("%v:%v@tcp(%v:%v)/%v?charset=utf8mb4&parseTime=True&loc=Local", config.User, config.Pass, config.IP, config.Port, config.DB)
 	client, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
@@ -43,11 +43,11 @@ func ConnectDefaultConfigMysql(config DefaultConfigMysql, useTrace bool) error {
 	return nil
 }
 
-// ConnectMysql  init new mysql client
+// NewMysqlConnect  init new mysql client
 // param: addr mysql address, format: root:123@tcp(127.0.0.1:3369)/foo?charset=utf8mb4&parseTime=True&loc=Local
 // param: config mysql config
 // param: isUsePool use connection pool
-func ConnectMysql(addr string, config *gorm.Config, usePool, useTrace bool) (*sql.DB, error) {
+func NewMysqlConnect(addr string, config *gorm.Config, usePool, useTrace bool) (*sql.DB, error) {
 	client, err := gorm.Open(mysql.Open(addr), config)
 	if err != nil {
 		return nil, err
@@ -74,7 +74,7 @@ func ConnectMysql(addr string, config *gorm.Config, usePool, useTrace bool) (*sq
 	return pool, nil
 }
 
-func NewMySQL() *gorm.DB {
+func MainMysql() *gorm.DB {
 	return mysqlClient
 }
 

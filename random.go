@@ -18,7 +18,7 @@ func (r Random) LetterAndNumber(len int) string {
 	return randstr.RandomAlphanumeric(len)
 }
 
-// Char 生成指定长度的字母
+// Char Generate letters of specified length
 func (r Random) Char(len int) string {
 	return randstr.RandomAlphabetic(len)
 }

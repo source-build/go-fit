@@ -96,7 +96,7 @@ func main() {
 		//使用WithContext(c)传递上下文，将会记录本次查询的行为
 		//不过需要在初始化mysql时开启才生效
 		//fit.TraceCaller() 记录文件名与行数
-		fit.NewMySQL().Set(fit.TraceCaller()).WithContext(c).Where("id = ?", 9).Take(&user)
+		fit.MainMysql().Set(fit.TraceCaller()).WithContext(c).Where("id = ?", 9).Take(&user)
 		c.String(http.StatusOK, "OK")
 	})
 

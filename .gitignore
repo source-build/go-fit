@@ -20,5 +20,8 @@ protoc
 logs
 keys
 
+dev
+dev_*
+
 # Dependency directories (remove the comment below to include it)
 # vendor/

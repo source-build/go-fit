@@ -10,6 +10,7 @@ import (
 )
 
 func main() {
+	//连接
 	err := fit.InitEtcd(clientv3.Config{
 		Endpoints:   []string{"127.0.0.1:2379"},
 		DialTimeout: time.Second * 5,
@@ -18,7 +19,8 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	res, err := fit.NewEtcd().Get("foo")
+	//使用
+	res, err := fit.MainEtcdv3().Get("foo")
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -26,7 +28,7 @@ func main() {
 	fmt.Println(res)
 
 	//服务发现
-	result, err := fit.NewServiceDiscovery(context.Background(), fit.GetClientV3(), "/services/rpc/messagepush/")
+	result, err := fit.NewServiceDiscovery(context.Background(), fit.MainEtcdClientv3(), "/services/rpc/messagepush/")
 	if err != nil {
 		log.Fatalln(err)
 	}

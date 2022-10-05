@@ -7,14 +7,14 @@ import (
 
 func main() {
 	//连接redis单节点
-	err := fit.NewDefaultRedisClient("127.0.0.1:6379", "", "", 0)
+	err := fit.NewRedisDefConnect("127.0.0.1:6379", "", "", 0)
 	if err != nil {
 		log.Fatalln(err)
 	}
 	defer fit.CloseRedis()
 
 	////连接redis单节点，自定义配置
-	//err = fit.NewRedisClient(redis.Options{
+	//err = fit.NewRedisConnect(redis.Options{
 	//	Addr:               "",
 	//	Username:           "",
 	//	Password:           "",
@@ -33,10 +33,10 @@ func main() {
 	//defer fit.CloseRedis()
 	//
 	////连接redis集群，默认0db
-	//err = fit.NewDefaultRedisCluster([]string{"127.0.0.1:6379", "127.0.0.1:6379"}, "", "")
+	//err = fit.NewRedisDefConnectCluster([]string{"127.0.0.1:6379", "127.0.0.1:6379"}, "", "")
 	//
 	////连接redis集群，自定义配置
-	//err = fit.NewRedisCluster(redis.ClusterOptions{
+	//err = fit.NewRedisConnectCluster(redis.ClusterOptions{
 	//	Addrs:              nil,
 	//	NewClient:          nil,
 	//	MaxRedirects:       0,
@@ -76,9 +76,14 @@ func main() {
 	  fit.WithGinTraceCtx() 传递gin.context,用于日志收集
 		fit.WithExpire() 设置key过期时间，默认不过期
 	*/
-	instance := fit.RedisClient()
+	instance := fit.MainRedis()
 	//添加hook,GetClient() 获取单节点实例，GetCluster() 获取集群实例，取决于你初始化时用单节点连接还是集群连接
 	//instance.GetCluster().AddHook()
+	//获取单节点实例，连接单节点后使用
+	instance.GetNode()
+	//获取集群实例，连接集群后使用
+	instance.GetCluster()
+	//使用，如果你连接单节点，则会使用单节点实例，反之，集群也是同样的；
 	_, err = instance.Set("key", "value")
 	if err != nil {
 		log.Fatalln(err)

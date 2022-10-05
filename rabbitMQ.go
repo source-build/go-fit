@@ -120,8 +120,8 @@ func (r *RabbitMQ) QueueDeclare(name string, durable bool, autoDelete bool, excl
 	return r
 }
 
-func (r *RabbitMQ) DefQueueDeclare(name string, durable bool) *RabbitMQ {
-	r.Queue, _ = r.channel.QueueDeclare(name, durable, false, false, false, nil)
+func (r *RabbitMQ) DefQueueDeclare(name string, durable, autoDel bool) *RabbitMQ {
+	r.Queue, _ = r.channel.QueueDeclare(name, durable, autoDel, false, false, nil)
 	return r
 }
 
@@ -143,12 +143,12 @@ func (r *RabbitMQ) ExchangeDeclare(name, kind string, durable, autoDelete, inter
 	return r
 }
 
-func (r *RabbitMQ) DefExchangeDeclare(name, kind string, durable bool) *RabbitMQ {
+func (r *RabbitMQ) DefExchangeDeclare(name, kind string, durable, autoDel bool) *RabbitMQ {
 	err := r.channel.ExchangeDeclare(
 		name,
 		kind,
 		durable,
-		false,
+		autoDel,
 		false,
 		false,
 		nil,
@@ -319,9 +319,6 @@ func (r *RabbitMQ) ReceiveSub(v ...ConsumeConfig) (<-chan amqp.Delivery, error) 
 func (r *RabbitMQ) ReceiveRouting(key string, v ...ConsumeConfig) (<-chan amqp.Delivery, error) {
 	if len(r.ExchangeName) == 0 {
 		return nil, errors.New("please first declare exchange")
-	}
-	if len(r.Queue.Name) == 0 {
-		return nil, errors.New("please first declare queue")
 	}
 
 	err := r.channel.QueueBind(

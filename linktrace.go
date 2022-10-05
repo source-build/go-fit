@@ -275,11 +275,11 @@ func (g *LinkTrace) GinTraceHandler() gin.HandlerFunc {
 		}
 		switch g.LogRecordMode {
 		case "LOCAL":
-			UseOtherLog(g.LogFileName, UseLocal()).TranceInfo(string(str))
+			OtherLog(g.LogFileName, UseLocal()).TranceInfo(string(str))
 		case "REMOTE":
-			UseOtherLog(g.LogFileName, UseRemote()).TranceInfo(string(str))
+			OtherLog(g.LogFileName, UseRemote()).TranceInfo(string(str))
 		case "CONSOLE":
-			UseOtherLog(g.LogFileName, UseConsole()).TranceInfo(string(str))
+			OtherLog(g.LogFileName, UseConsole()).TranceInfo(string(str))
 		}
 	}
 }
@@ -348,11 +348,11 @@ func (g *LinkTrace) GrpcServerInterceptor() grpc.UnaryServerInterceptor {
 		}
 		switch g.LogRecordMode {
 		case "LOCAL":
-			UseOtherLog(g.LogFileName, UseLocal()).TranceInfo(string(str))
+			OtherLog(g.LogFileName, UseLocal()).TranceInfo(string(str))
 		case "REMOTE":
-			UseOtherLog(g.LogFileName, UseRemote()).TranceInfo(string(str))
+			OtherLog(g.LogFileName, UseRemote()).TranceInfo(string(str))
 		case "CONSOLE":
-			UseOtherLog(g.LogFileName, UseConsole()).TranceInfo(string(str))
+			OtherLog(g.LogFileName, UseConsole()).TranceInfo(string(str))
 		}
 		return res, err
 	}

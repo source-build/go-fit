@@ -33,24 +33,24 @@ func main() {
 	//mq.SetRabbitMqErrLogHandle(fit.ALL)
 
 	// 声明队列
-	// mq.DefQueueDeclare(name,durable) 使用默认声明队列。参数说明: name 队列名称 durable 是否持久化
+	// mq.DefQueueDeclare(name,durable,autoDelete) 使用默认声明队列。参数说明: name 队列名称 durable 是否持久化 autoDelete 是否自动删除
 	// mq.QueueDeclare() 声明队列。跟官方的参数一致，有点多，自己点进去看😊
 	// name 为空则随机生成
-	// 小贴士: 声明队列支持链式调用,像这样：mq.DefQueueDeclare("logs", false).PublishSimple()
-	//mq.DefQueueDeclare("logs", false)
+	// 小贴士: 声明队列支持链式调用,像这样：mq.DefQueueDeclare("logs", false,false).PublishSimple()
+	//mq.DefQueueDeclare("logs", false,false)
 
 	// 声明交换机
-	// mq.DefExchangeDeclare(名称,模式,持久化) 默认交换机。参数模式: 可选值 fit.KIND_*
+	// mq.DefExchangeDeclare(名称,模式,持久化,自动删除) 默认交换机。参数模式: 可选值 fit.KIND_*
 	// mq.ExchangeDeclare() 跟官方的参数一致，有点多，自己点进去看😊
 	// 小贴士: 同样支持链式调用,像这样：mq.DefExchangeDeclare().PublishPub()
-	//mq.DefExchangeDeclare("exchange_test", fit.KIND_FANOU,false)
+	//mq.DefExchangeDeclare("exchange_test", fit.KIND_FANOU,false,false)
 
 	//******************* （simple|work）简单模式 *******************
 	// 注意️： 简单模式(最简单的收发模式)中，不需要用到交换机，所以复制粘贴食用，
 	// 消费者多个的情况下消息会以轮询的方式公平分发，每个消费者消费的次数相同。
 
 	//-------------------- 生产者 --------------------
-	err = mq.DefQueueDeclare("logs", false).PublishSimple("这是内容")
+	err = mq.DefQueueDeclare("logs", false, false).PublishSimple("这是内容")
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -59,7 +59,7 @@ func main() {
 	//-------------------- 消费者 --------------------
 	// mq.ConsumeSimple() 使用默认配置创建消费者
 	// mq.ConsumeSimple(fit.ConsumeConfig{}) 完整配置创建消费者
-	simple, err := mq.ConsumeSimple()
+	simple, err := mq.DefQueueDeclare("logs", false, true).ConsumeSimple()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func main() {
 
 	//-------------------- 生产者(发布) --------------------
 	//声明交换机，fit.KIND_FANOUT 表示广播到所有与此绑定的队列
-	//err = mq.DefExchangeDeclare("exchange_test1", fit.KIND_FANOUT, false).
+	//err = mq.DefExchangeDeclare("exchange_test1", fit.KIND_FANOUT, false,false).
 	//	PublishPub("这是新的消息") //将消息发送到 exchange_test1 交换机上
 	//if err != nil {
 	//	log.Fatal(err)
@@ -89,8 +89,8 @@ func main() {
 
 	//-------------------- 消费者(订阅) --------------------
 	//ReceiveSub()方法参数为空则使用默认配置的消费者
-	//msgs, err := mq.DefQueueDeclare("", false).
-	//	DefExchangeDeclare("exchange_test1", fit.KIND_FANOUT, false).
+	//msgs, err := mq.DefQueueDeclare("", false,false).
+	//	DefExchangeDeclare("exchange_test1", fit.KIND_FANOUT, false,false).
 	//	ReceiveSub()
 	//if err != nil {
 	//	log.Fatal(err)
@@ -105,7 +105,7 @@ func main() {
 
 	//-------------------- 生产者(发布) --------------------
 	//声明交换机。fit.KIND_DIRECT 交换机将会对binding key和routing key进行精确匹配，从而确定消息该分发到哪个队列
-	//mq = mq.DefExchangeDeclare("exchange_test2", fit.KIND_DIRECT, true)
+	//mq = mq.DefExchangeDeclare("exchange_test2", fit.KIND_DIRECT, true,false)
 	////将消息发送到 exchange_test2 交换机上
 	//if err := mq.Publish("这是新的消息", "error"); err != nil {
 	//	log.Fatal(err)
@@ -114,7 +114,7 @@ func main() {
 
 	//-------------------- 消费者(接收) --------------------
 	//创建交换机
-	//ex := mq.DefExchangeDeclare("exchange_test2", fit.KIND_DIRECT, true)
+	//ex := mq.DefExchangeDeclare("exchange_test2", fit.KIND_DIRECT, true,false)
 	////随机生成队列名
 	//msgs, err = ex.QueueDeclare("", false, false, true, false, nil).
 	//	ReceiveRouting("error") //路由key
@@ -138,7 +138,7 @@ func main() {
 
 	//-------------------- 生产者 --------------------
 	//声明交换机。fit.KIND_DIRECT 交换机将会对binding key和routing key进行精确匹配，从而确定消息该分发到哪个队列
-	//mq = mq.DefExchangeDeclare("exchange_test3", fit.KIND_TOPIC, true)
+	//mq = mq.DefExchangeDeclare("exchange_test3", fit.KIND_TOPIC, true,false)
 	////将消息发送到 exchange_test3 交换机上,注意通配符说明
 	////如：hello.* == hello.world | 匹配多个单词: hello.# == hello.world.one
 	//if err := mq.PublishTopic("这是新的消息6666", "hello.*"); err != nil {
@@ -148,7 +148,7 @@ func main() {
 
 	//-------------------- 消费者 --------------------
 	//创建交换机
-	//ex := mq.DefExchangeDeclare("exchange_test2", fit.KIND_TOPIC, true)
+	//ex := mq.DefExchangeDeclare("exchange_test2", fit.KIND_TOPIC, true,false)
 	////随机生成队列名
 	//msgs, err := ex.QueueDeclare("", false, false, true, false, nil).
 	//	ReceiveTopic("hello.world")

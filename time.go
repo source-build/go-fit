@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// BeforeDawnTimeDifference 此刻到明日凌晨00：00的时间差
+// BeforeDawnTimeDifference Time difference between now and 00:00 am tomorrow
 func BeforeDawnTimeDifference() time.Duration {
 	now := time.Now()
 	next := now.Add(time.Hour * 24)
@@ -13,7 +13,7 @@ func BeforeDawnTimeDifference() time.Duration {
 	return next.Sub(now)
 }
 
-// SpecifiedTimeExceeded 当前是否超过了给定时间
+// SpecifiedTimeExceeded Whether the current time exceeds the given time
 func SpecifiedTimeExceeded(unix int64) bool {
 	if time.Now().Unix()-unix < 0 {
 		return false
