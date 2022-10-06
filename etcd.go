@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"go.etcd.io/etcd/client/v3"
 	"time"
 )
@@ -145,7 +144,6 @@ func (e *EtcdHandle) WatchPrefix() func(prefix string, data chan *clientv3.Event
 					data <- event
 				}
 			case <-e.ctx.Done():
-				fmt.Println("收到")
 				close(data)
 				return
 			}

@@ -2,7 +2,6 @@ package fit
 
 import (
 	"context"
-	"fmt"
 	"go.etcd.io/etcd/client/v3"
 )
 
@@ -64,7 +63,6 @@ func (e *ServiceRegister) keepAlive() {
 	for {
 		select {
 		case resp := <-e.keepAliveChan:
-			fmt.Println(resp)
 			if resp == nil {
 				Info("[ETCD Lease]: lease expired")
 				return
