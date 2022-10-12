@@ -2,7 +2,6 @@ package fit
 
 import (
 	"context"
-	"fmt"
 	"go.etcd.io/etcd/client/v3"
 	"math/rand"
 	"time"
@@ -24,6 +23,9 @@ func (l *LoadBalancingPolicy) Add(addr string) {
 // SelectByRand random
 func (l *LoadBalancingPolicy) SelectByRand() string {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	if len(l.Addrs) == 0 {
+		return ""
+	}
 	index := r.Intn(len(l.Addrs))
 	return l.Addrs[index]
 }
@@ -38,6 +40,5 @@ func NewServiceDiscovery(ctx context.Context, client *clientv3.Client, prefix st
 	for _, v := range result.Kvs {
 		l.Add(string(v.Value))
 	}
-	fmt.Printf("%+v\n", l)
 	return &l, nil
 }
