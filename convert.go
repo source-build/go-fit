@@ -66,7 +66,7 @@ func MapConvertSlice(input interface{}) []interface{} {
 	return sli
 }
 
-func SliceConvertMap(sli []any) map[string]any {
+func SliceConvertMap(sli []any) map[string]interface{} {
 	mapObj := make(map[string]any, 0)
 	for i := 0; i < len(sli); i++ {
 		if i+1 >= len(sli) {

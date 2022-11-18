@@ -3,7 +3,6 @@ package fit
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -260,11 +259,6 @@ func (g *LinkTrace) GinTraceHandler() gin.HandlerFunc {
 
 		trace.End = time.Now().Unix()
 		trace.Cost = time.Since(t).String()
-		str, err := json.Marshal(trace)
-		if err != nil {
-			Error("link trace json marshal error:" + err.Error())
-			return
-		}
 
 		if g.hook != nil {
 			g.hook.AfterProcess(trace)
@@ -275,11 +269,11 @@ func (g *LinkTrace) GinTraceHandler() gin.HandlerFunc {
 		}
 		switch g.LogRecordMode {
 		case "LOCAL":
-			OtherLog(g.LogFileName, UseLocal()).TranceInfo(string(str))
+			OtherLog(g.LogFileName, UseLocal()).TranceInfo(trace)
 		case "REMOTE":
-			OtherLog(g.LogFileName, UseRemote()).TranceInfo(string(str))
+			OtherLog(g.LogFileName, UseRemote()).TranceInfo(trace)
 		case "CONSOLE":
-			OtherLog(g.LogFileName, UseConsole()).TranceInfo(string(str))
+			OtherLog(g.LogFileName, UseConsole()).TranceInfo(trace)
 		}
 	}
 }
@@ -333,11 +327,6 @@ func (g *LinkTrace) GrpcServerInterceptor() grpc.UnaryServerInterceptor {
 		trace.Error = err
 		trace.End = time.Now().Unix()
 		trace.Cost = time.Since(t).String()
-		str, err := json.Marshal(trace)
-		if err != nil {
-			Error("link trace json marshal error:" + err.Error())
-			return res, err
-		}
 
 		if g.hook != nil {
 			g.hook.AfterProcess(trace)
@@ -348,11 +337,11 @@ func (g *LinkTrace) GrpcServerInterceptor() grpc.UnaryServerInterceptor {
 		}
 		switch g.LogRecordMode {
 		case "LOCAL":
-			OtherLog(g.LogFileName, UseLocal()).TranceInfo(string(str))
+			OtherLog(g.LogFileName, UseLocal()).TranceInfo(trace)
 		case "REMOTE":
-			OtherLog(g.LogFileName, UseRemote()).TranceInfo(string(str))
+			OtherLog(g.LogFileName, UseRemote()).TranceInfo(trace)
 		case "CONSOLE":
-			OtherLog(g.LogFileName, UseConsole()).TranceInfo(string(str))
+			OtherLog(g.LogFileName, UseConsole()).TranceInfo(trace)
 		}
 		return res, err
 	}

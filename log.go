@@ -20,7 +20,7 @@ var outConsole bool
 
 var remoteRabbitMQLog *RemoteRabbitMQLog
 
-var customizeLog chan string
+var customizeLog chan map[string]interface{}
 
 var stackLength int = 300
 
@@ -163,11 +163,11 @@ func (l Local) Fatal(v ...interface{}) {
 	writeLocalLogInstance(l.instanceName, FatalLevel, getBody(v...), caller)
 }
 
-func getBody(v ...interface{}) string {
+func getBody(v ...interface{}) map[string]interface{} {
 	var body string
-	if len(v) <= 1 {
+	if len(v) == 1 {
 		body = v[0].(string)
-		return body
+		return map[string]interface{}{"message": body}
 	}
 
 	//intercept stack information of specified length
@@ -186,16 +186,10 @@ func getBody(v ...interface{}) string {
 		}
 	}
 
-	b, err := json.Marshal(SliceConvertMap(v))
-	if err != nil {
-		return ""
-	}
-	body = string(b)
-
-	return body
+	return SliceConvertMap(v)
 }
 
-func writeLocalLog(level int, body string, rc ...reportCaller) {
+func writeLocalLog(level int, body map[string]interface{}, rc ...reportCaller) {
 	el, ok := logs[defLog]
 	if !ok {
 		return
@@ -204,7 +198,16 @@ func writeLocalLog(level int, body string, rc ...reportCaller) {
 	writeFile(el, level, body, rc)
 }
 
-func writeLocalLogInstance(instance string, level int, body string, rc ...reportCaller) {
+func writeLocalLogToJson(level int, body map[string]interface{}, rc ...reportCaller) {
+	el, ok := logs[defLog]
+	if !ok {
+		return
+	}
+
+	writeJsonToFile(el, level, body, rc)
+}
+
+func writeLocalLogInstance(instance string, level int, body map[string]interface{}, rc ...reportCaller) {
 	el, ok := logs[instance]
 	if !ok {
 		return
@@ -213,33 +216,89 @@ func writeLocalLogInstance(instance string, level int, body string, rc ...report
 	writeFile(el, level, body, rc)
 }
 
-func writeFile(el *logrus.Logger, level int, body string, rc []reportCaller) {
+func writeFile(el *logrus.Logger, level int, body map[string]interface{}, rc []reportCaller) {
 	if len(rc) > 0 && len(rc[0].file) > 0 {
 		_, file := filepath.Split(rc[0].file)
 		caller := StringSpliceTag(":", file, strconv.Itoa(rc[0].line))
+		body["caller"] = caller
+		entry := el.WithFields(body)
 		switch level {
 		case ErrorLevel:
-			el.WithField("caller", caller).Error(body)
+			entry.Error()
 		case WarningLevel:
-			el.WithField("caller", caller).Warning(body)
+			entry.Warning()
 		case FatalLevel:
-			el.WithField("caller", caller).Fatal(body)
+			entry.Fatal()
 		case InfoLevel:
-			el.WithField("caller", caller).Info(body)
+			entry.Info()
 		case TranceInfoLevel:
-			el.WithFields(logrus.Fields{"caller": caller, "trace": body}).Info()
+			delete(body, caller)
+			rest, err := json.Marshal(&body)
+			if err != nil {
+				return
+			}
+			el.WithFields(logrus.Fields{"caller": caller, "trace": string(rest)}).Info()
 		}
 		return
 	}
+
+	entry := el.WithFields(body)
 	switch level {
 	case ErrorLevel:
-		el.Error(body)
+		entry.Error()
 	case WarningLevel:
-		el.Warning(body)
+		entry.Warning()
 	case FatalLevel:
-		el.Fatal(body)
+		entry.Fatal()
 	case InfoLevel:
-		el.Info(body)
+		entry.Info()
+	}
+}
+
+func writeJsonToFile(el *logrus.Logger, level int, body map[string]interface{}, rc []reportCaller) {
+	if len(rc) > 0 && len(rc[0].file) > 0 {
+		_, file := filepath.Split(rc[0].file)
+		caller := StringSpliceTag(":", file, strconv.Itoa(rc[0].line))
+		body["caller"] = caller
+		jsonText, err := json.Marshal(&body)
+		if err != nil {
+			return
+		}
+		entry := el.WithFields(logrus.Fields{"json": string(jsonText)})
+		switch level {
+		case ErrorLevel:
+			entry.Error()
+		case WarningLevel:
+			entry.Warning()
+		case FatalLevel:
+			entry.Fatal()
+		case InfoLevel:
+			entry.Info()
+		case TranceInfoLevel:
+			delete(body, caller)
+			rest, err := json.Marshal(&body)
+			if err != nil {
+				return
+			}
+			el.WithFields(logrus.Fields{"caller": caller, "trace": string(rest)}).Info()
+		}
+		return
+	}
+
+	jsonText, err := json.Marshal(&body)
+	if err != nil {
+		return
+	}
+	entry := el.WithFields(logrus.Fields{"json": string(jsonText)})
+	switch level {
+	case ErrorLevel:
+		entry.Error()
+	case WarningLevel:
+		entry.Warning()
+	case FatalLevel:
+		entry.Fatal()
+	case InfoLevel:
+		entry.Info()
 	}
 }
 
@@ -250,7 +309,7 @@ func output(level int, v ...interface{}) {
 
 	defer func() {
 		if err := recover(); err != nil {
-			writeLocalLog(ErrorLevel, H{"title": "exception capture,an error occurred in the output function", "error": err}.ToString())
+			writeLocalLog(ErrorLevel, H{"msg": "exception capture,an error occurred in the output function", "err": err})
 		}
 	}()
 
@@ -278,33 +337,50 @@ func output(level int, v ...interface{}) {
 	if remoteRabbitMQLog != nil {
 		mq, err := NewRabbitMQ()
 		if err != nil {
-			writeLocalLog(ErrorLevel, H{"title": "NewRabbitMQ() error", "error": err.Error()}.ToString())
+			if len(caller.file) > 0 {
+				writeLocalLog(ErrorLevel, H{"msg": "NewRabbitMQ() error", "err": err.Error()}, caller)
+			} else {
+				writeLocalLog(ErrorLevel, H{"msg": "NewRabbitMQ() error", "err": err.Error()})
+			}
 			return
 		}
 		defer mq.Close()
-		if remoteTemplateHandler != nil {
-			body = remoteTemplateHandler.Before(body)
+
+		rest, err := json.Marshal(&H{"logger": &body})
+		if err != nil {
+			if len(caller.file) > 0 {
+				writeLocalLog(ErrorLevel, H{"msg": "NewRabbitMQ() error", "err": err.Error()}, caller)
+			} else {
+				writeLocalLog(ErrorLevel, H{"msg": "NewRabbitMQ() error", "err": err.Error()})
+			}
 		}
-		err = mq.DefExchangeDeclare(remoteRabbitMQLog.Exchange, KIND_DIRECT, remoteRabbitMQLog.Durable, true).
-			Publish(body, remoteRabbitMQLog.Key)
+
+		message := string(rest)
+		if remoteTemplateHandler != nil {
+			remoteTemplateHandler.Before(message)
+		}
+		err = mq.DefExchangeDeclare(remoteRabbitMQLog.Exchange, KIND_DIRECT, remoteRabbitMQLog.Durable, true).Publish(message, remoteRabbitMQLog.Key)
 		if err != nil {
 			if remoteTemplateHandler != nil {
 				remoteTemplateHandler.Error(err)
 			}
-			writeLocalLog(ErrorLevel, H{"title": "Publish() error", "error": err.Error()}.ToString())
-			return
+			if len(caller.file) > 0 {
+				writeLocalLog(ErrorLevel, H{"msg": "Publish() error", "err": err.Error()}, caller)
+			} else {
+				writeLocalLog(ErrorLevel, H{"msg": "Publish() error", "err": err.Error()})
+			}
 		}
 	}
 }
 
-func outputJSON(level int, s string) {
+func outputJSON(level int, s map[string]interface{}) {
 	if outConsole {
 		fmt.Println(s)
 	}
 
 	defer func() {
 		if err := recover(); err != nil {
-			writeLocalLog(ErrorLevel, H{"title": "exception capture,an error occurred in the output function", "error": err}.ToString())
+			writeLocalLog(ErrorLevel, H{"message": "exception capture,an error occurred in the output function", "err": err})
 		}
 	}()
 
@@ -321,29 +397,39 @@ func outputJSON(level int, s string) {
 	}
 
 	if len(caller.file) > 0 {
-		writeLocalLog(level, s, caller)
+		writeLocalLogToJson(level, s, caller)
 	} else {
-		writeLocalLog(level, s)
+		writeLocalLogToJson(level, s)
 	}
 
 	//remote log
 	if remoteRabbitMQLog != nil {
 		mq, err := NewRabbitMQ()
 		if err != nil {
-			writeLocalLog(ErrorLevel, H{"title": "NewRabbitMQ() error", "error": err.Error()}.ToString())
+			writeLocalLog(ErrorLevel, H{"title": "NewRabbitMQ() error", "err": err.Error()})
 			return
 		}
 		defer mq.Close()
+
+		rest, err := json.Marshal(&H{"logger": &s})
+		if err != nil {
+			if len(caller.file) > 0 {
+				writeLocalLog(ErrorLevel, H{"msg": "NewRabbitMQ() error", "err": err.Error()}, caller)
+			} else {
+				writeLocalLog(ErrorLevel, H{"msg": "NewRabbitMQ() error", "err": err.Error()})
+			}
+		}
+		message := string(rest)
 		if remoteTemplateHandler != nil {
-			s = remoteTemplateHandler.Before(s)
+			remoteTemplateHandler.Before(message)
 		}
 		err = mq.DefExchangeDeclare(remoteRabbitMQLog.Exchange, KIND_DIRECT, remoteRabbitMQLog.Durable, true).
-			Publish(s, remoteRabbitMQLog.Key)
+			Publish(message, remoteRabbitMQLog.Key)
 		if err != nil {
 			if remoteTemplateHandler != nil {
 				remoteTemplateHandler.Error(err)
 			}
-			writeLocalLog(ErrorLevel, H{"title": "Publish() error", "error": err.Error()}.ToString())
+			writeLocalLog(ErrorLevel, H{"title": "Publish() error", "err": err.Error()})
 			return
 		}
 	}
@@ -353,32 +439,32 @@ func Info(v ...interface{}) {
 	output(InfoLevel, v...)
 }
 
-func InfoJSON(h H) {
-	outputJSON(InfoLevel, h.ToString())
+func InfoJSON(h map[string]interface{}) {
+	outputJSON(InfoLevel, h)
 }
 
 func Error(v ...interface{}) {
 	output(ErrorLevel, v...)
 }
 
-func ErrorJSON(h H) {
-	outputJSON(ErrorLevel, h.ToString())
+func ErrorJSON(h map[string]interface{}) {
+	outputJSON(ErrorLevel, h)
 }
 
 func Warning(v ...interface{}) {
 	output(WarningLevel, v...)
 }
 
-func WarningJSON(h H) {
-	outputJSON(ErrorLevel, h.ToString())
+func WarningJSON(h map[string]interface{}) {
+	outputJSON(ErrorLevel, h)
 }
 
 func Fatal(v ...interface{}) {
 	output(FatalLevel, v...)
 }
 
-func FatalJSON(h H) {
-	output(FatalLevel, h.ToString())
+func FatalJSON(h map[string]interface{}) {
+	output(FatalLevel, h)
 }
 
 func SetOutputToConsole(v bool) {
@@ -389,9 +475,9 @@ func SetRemoteRabbitMQLog(config *RemoteRabbitMQLog) {
 	remoteRabbitMQLog = config
 }
 
-func CustomizeLog() <-chan string {
+func CustomizeLog() <-chan map[string]interface{} {
 	if customizeLog == nil {
-		customizeLog = make(chan string)
+		customizeLog = make(chan map[string]interface{})
 	}
 	return customizeLog
 }
@@ -465,8 +551,8 @@ func (u *useOtherConfig) Info(v ...interface{}) {
 	u.output(InfoLevel, v...)
 }
 
-func (u *useOtherConfig) TranceInfo(v ...interface{}) {
-	u.output(TranceInfoLevel, v...)
+func (u *useOtherConfig) TranceInfo(v interface{}) {
+	u.output(TranceInfoLevel, v)
 }
 
 func (u *useOtherConfig) Error(v ...interface{}) {
@@ -485,14 +571,11 @@ func (u *useOtherConfig) output(level int, v ...interface{}) {
 	if u.console {
 		fmt.Println(v...)
 	}
-
 	defer func() {
 		if err := recover(); err != nil {
-			u.writeLocalLog(ErrorLevel, H{"title": "exception capture,an error occurred in the output function", "error": err}.ToString())
+			u.writeLocalLog(ErrorLevel, H{"message": "exception capture,an error occurred in the output function", "err": err})
 		}
 	}()
-
-	body := getBody(v...)
 
 	var caller reportCaller
 	if u.caller {
@@ -508,67 +591,126 @@ func (u *useOtherConfig) output(level int, v ...interface{}) {
 		}
 	}
 
-	if len(caller.file) > 0 {
-		u.writeLocalLog(level, body, caller)
+	var body map[string]interface{}
+	if level == TranceInfoLevel {
+		if len(v) == 1 {
+			u.writeLocalLogTrance(v[0])
+		}
 	} else {
-		u.writeLocalLog(level, body)
+		body = getBody(v...)
+		if len(caller.file) > 0 {
+			u.writeLocalLog(level, body, caller)
+		} else {
+			u.writeLocalLog(level, body)
+		}
 	}
 
 	//remote log
 	if u.remote {
+		if body == nil {
+			return
+		}
+
 		mq, err := NewRabbitMQ()
 		if err != nil {
-			u.writeLocalLog(ErrorLevel, H{"title": "NewRabbitMQ() error", "error": err.Error()}.ToString())
+			by := H{"message": "NewRabbitMQ() error", "err": err.Error()}
+			if len(caller.file) > 0 {
+				u.writeLocalLog(ErrorLevel, by, caller)
+			} else {
+				u.writeLocalLog(ErrorLevel, by)
+			}
 			return
 		}
 		defer mq.Close()
+
+		var message string
+		if level == TranceInfoLevel {
+			if len(v) == 1 {
+				text, err := json.Marshal(&H{"trace": v[0]})
+				if err != nil {
+					by := H{"message": "NewRabbitMQ() json Marshal err", "err": err.Error()}
+					if len(caller.file) > 0 {
+						u.writeLocalLog(ErrorLevel, by, caller)
+					} else {
+						u.writeLocalLog(ErrorLevel, by)
+					}
+					return
+				}
+				message = string(text)
+			}
+		} else {
+			str, err := json.Marshal(&H{"logger": &body})
+			if err != nil {
+				by := H{"message": "NewRabbitMQ() json Marshal err", "err": err.Error()}
+				if len(caller.file) > 0 {
+					u.writeLocalLog(ErrorLevel, by, caller)
+				} else {
+					u.writeLocalLog(ErrorLevel, by)
+				}
+				return
+			}
+			message = string(str)
+		}
+
 		if remoteTemplateHandler != nil {
-			body = remoteTemplateHandler.Before(body)
+			remoteTemplateHandler.Before(message)
 		}
 		err = mq.DefExchangeDeclare(remoteRabbitMQLog.Exchange, KIND_DIRECT, remoteRabbitMQLog.Durable, true).
-			Publish(body, remoteRabbitMQLog.Key)
+			Publish(message, remoteRabbitMQLog.Key)
 		if err != nil {
 			if remoteTemplateHandler != nil {
 				remoteTemplateHandler.Error(err)
 			}
-			u.writeLocalLog(ErrorLevel, H{"title": "Publish() error", "error": err.Error()}.ToString())
-			return
+			by := H{"message": "Publish() error", "err": err.Error()}
+			if len(caller.file) > 0 {
+				u.writeLocalLog(ErrorLevel, by, caller)
+			} else {
+				u.writeLocalLog(ErrorLevel, by)
+			}
+
 		}
 	}
 }
 
-func (u *useOtherConfig) writeLocalLog(level int, body string, rc ...reportCaller) {
+func (u *useOtherConfig) writeLocalLogTrance(v interface{}) {
+	if u.log == nil {
+		return
+	}
+	u.log.WithFields(logrus.Fields{"trace": v}).Info()
+}
+
+func (u *useOtherConfig) writeLocalLog(level int, body map[string]interface{}, rc ...reportCaller) {
 	if u.log == nil {
 		return
 	}
 	if len(rc) > 0 && len(rc[0].file) > 0 {
 		_, file := filepath.Split(rc[0].file)
 		caller := StringSpliceTag(":", file, strconv.Itoa(rc[0].line))
+		body["caller"] = caller
+		entry := u.log.WithFields(body)
 		switch level {
 		case ErrorLevel:
-			u.log.WithField("caller", caller).Error(body)
+			entry.Error()
 		case WarningLevel:
-			u.log.WithField("caller", caller).Warning(body)
+			entry.Warning()
 		case FatalLevel:
-			u.log.WithField("caller", caller).Fatal(body)
+			entry.Fatal()
 		case InfoLevel:
-			u.log.WithField("caller", caller).Info(body)
-		case TranceInfoLevel:
-			u.log.WithFields(logrus.Fields{"caller": caller, "trace": body}).Info()
+			entry.Info()
 		}
 		return
 	}
+
+	entry := u.log.WithFields(body)
 	switch level {
 	case ErrorLevel:
-		u.log.Error(body)
+		entry.Error()
 	case WarningLevel:
-		u.log.Warning(body)
+		entry.Warning()
 	case FatalLevel:
-		u.log.Fatal(body)
+		entry.Fatal()
 	case InfoLevel:
-		u.log.Info(body)
-	case TranceInfoLevel:
-		u.log.WithFields(logrus.Fields{"trace_info": body}).Info()
+		entry.Info()
 	}
 }
 
@@ -629,25 +771,54 @@ func defaultConfig(entity *LogEntity) *LogEntity {
 }
 
 func RemoteLog(t int, v ...interface{}) {
-	if remoteRabbitMQLog != nil {
-		body := getBody(v...)
-		mq, err := NewRabbitMQ()
-		defer mq.Close()
-		if err != nil {
-			writeLocalLog(t, body)
-			return
+	if remoteRabbitMQLog == nil || len(v) == 0 {
+		return
+	}
+
+	var caller reportCaller
+	if isReportCaller {
+		if _, file, line, ok := runtime.Caller(2); ok {
+			caller.file = file
+			caller.line = line
 		}
+	}
+
+	body := getBody(v...)
+
+	mq, err := NewRabbitMQ()
+	if err != nil {
+		if len(caller.file) > 0 {
+			writeLocalLog(t, H{"message": "Publish() error", "err": err.Error()}, caller)
+		} else {
+			writeLocalLog(t, H{"message": "Publish() error", "err": err.Error()})
+		}
+		return
+	}
+	defer mq.Close()
+
+	str, err := json.Marshal(&H{"logger": &body})
+	if err != nil {
+		if len(caller.file) > 0 {
+			writeLocalLog(t, H{"message": "NewRabbitMQ() json Marshal err", "err": err.Error()}, caller)
+		} else {
+			writeLocalLog(t, H{"message": "NewRabbitMQ() json Marshal err", "err": err.Error()})
+		}
+		return
+	}
+	message := string(str)
+	if remoteTemplateHandler != nil {
+		remoteTemplateHandler.Before(message)
+	}
+	err = mq.DefExchangeDeclare(remoteRabbitMQLog.Exchange, KIND_DIRECT, remoteRabbitMQLog.Durable, true).
+		Publish(message, remoteRabbitMQLog.Key)
+	if err != nil {
 		if remoteTemplateHandler != nil {
-			body = remoteTemplateHandler.Before(body)
+			remoteTemplateHandler.Error(err)
 		}
-		err = mq.DefExchangeDeclare(remoteRabbitMQLog.Exchange, KIND_DIRECT, remoteRabbitMQLog.Durable, true).
-			Publish(body, remoteRabbitMQLog.Key)
-		if err != nil {
-			if remoteTemplateHandler != nil {
-				remoteTemplateHandler.Error(err)
-			}
-			writeLocalLog(t, body)
-			return
+		if len(caller.file) > 0 {
+			writeLocalLog(t, H{"message": "Publish() error", "err": err.Error()}, caller)
+		} else {
+			writeLocalLog(t, H{"message": "Publish() error", "err": err.Error()})
 		}
 	}
 }

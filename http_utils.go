@@ -35,6 +35,8 @@ const (
 	HandleOk  = "操作成功"
 )
 
+var HandlerFailErr = errors.New(HandleErr)
+
 const (
 	TypeClientErr = iota
 	TypeServerErr

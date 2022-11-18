@@ -31,12 +31,12 @@ func main() {
 		LogPath:  "logs",
 		FileName: "mysql",
 	})
-	////设置堆栈错误信息长度(默认300)，错误信息key应为err
+	//设置堆栈错误信息长度(默认300)，错误信息key应为err
 	fit.SetLogStackLength(100)
 	//开启控制台输出
 	fit.SetOutputToConsole(true)
 
-	////开启远程日志，这里使用rabbitMQ并使用路由模式，消息会原样发送
+	//开启远程日志，这里使用rabbitMQ并使用路由模式，消息会原样发送
 	fit.SetMqURL("amqp://guest:guest@127.0.0.1:5672")
 	fit.SetRemoteRabbitMQLog(&fit.RemoteRabbitMQLog{ //
 		Exchange: "abnormalHandle", //交换机名称

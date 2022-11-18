@@ -77,7 +77,7 @@ func main() {
 	gt.SetServiceType("api")
 
 	//钩子
-	gt.AddHook(new(traceHandler))
+	//gt.AddHook(new(traceHandler))
 
 	//使用
 	g.Use(gt.GinTraceHandler())
@@ -86,7 +86,7 @@ func main() {
 	g.GET("/", func(c *gin.Context) {
 		trace, _ := fit.GetGinTraceCtx(c)
 		//自定义信息，最终会放到Extend字段下
-		trace.Set("name", "zhangsan")
+		trace.Set("name", "张三")
 		c.String(http.StatusOK, "OK")
 	})
 

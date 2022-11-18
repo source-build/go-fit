@@ -64,7 +64,7 @@ func (e *ServiceRegister) keepAlive() {
 		select {
 		case resp := <-e.keepAliveChan:
 			if resp == nil {
-				Info("[ETCD Lease]: lease expired")
+				Info("msg", "[ETCD Lease]: lease expired")
 				return
 			}
 		}
