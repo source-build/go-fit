@@ -39,6 +39,7 @@ func GetRandomAvPort() (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	defer listen.Close()
 	return listen.Addr().(*net.TCPAddr).Port, nil
 }
 
