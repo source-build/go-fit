@@ -23,21 +23,28 @@ const (
 	// ServiceStatusRun In operation
 	ServiceStatusRun ThisServiceStatus = iota
 
+	// ServiceStatusNotAvailable This service is not available.
+	// At this point, external service provision should be stopped until the status is restored
+	ServiceStatusNotAvailable
+
 	// ServiceStatusWaitDone Waiting for the resource connection in the service to be released,
 	// at which point the service refuses to provide external services
+	//
+	// After completing all tasks within the service, it should immediately shut down. Once the value is in this state,
+	// the state cannot be changed again
 	ServiceStatusWaitDone
+
+	// ServiceStatusKill We need to forcibly kill this process
+	ServiceStatusKill
 )
 
 type RegisterCenterValue struct {
 	CreatedAt int64 `json:"created_at"`
-	UpdatedAt int64 `json:"updated_at"`
 	//Service address, HTTP service plus full protocol.
 	Addr string `json:"addr"`
 
-	//Is the service available? If not, then traffic should not be forwarded to this service again.
-	//The reason for the unavailability can be analyzed through the Reason field
-	Available bool   `json:"available"`
-	Reason    string `json:"reason"`
+	//When the service status is unavailable, the reason for the unavailability can be read through this field, if it has a value
+	Reason string `json:"reason"`
 
 	//Service types are divided into basic services and clone services.
 	//Basic services are manually initiated, so the monitoring system should not delete these services.
@@ -52,9 +59,7 @@ type RegisterCenterValue struct {
 func NewRegisterCenterValue(addr string) string {
 	return H{
 		"created_at":  time.Now().Unix(),
-		"updated_at":  time.Now().Unix(),
 		"addr":        addr,
-		"available":   true,
 		"entity_type": ServiceTypeBasic,
 		"status":      ServiceStatusRun,
 	}.ToString()
@@ -103,15 +108,24 @@ func (r *Resolver) watcher() {
 		return
 	}
 	addresses := make([]resolver.Address, 0)
+	var desc string
 	for _, kv := range response.Kvs {
 		var rg RegisterCenterValue
 		if err := json.Unmarshal(kv.Value, &rg); err != nil {
 			break
 		}
-		addresses = append(addresses, resolver.Address{ServerName: string(kv.Key), Addr: rg.Addr})
+		if rg.Status == ServiceStatusRun {
+			addresses = append(addresses, resolver.Address{ServerName: string(kv.Key), Addr: rg.Addr})
+		} else if rg.Reason != "" {
+			desc = rg.Reason
+		}
 	}
 	if len(addresses) == 0 {
-		r.cc.ReportError(errors.New("no available services"))
+		if desc != "" {
+			r.cc.ReportError(errors.New(desc))
+		} else {
+			r.cc.ReportError(errors.New("no available services"))
+		}
 		return
 	}
 

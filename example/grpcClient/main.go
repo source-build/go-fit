@@ -35,9 +35,9 @@ func main() {
 	//发起grpc请求时会自动解析并使用负载均衡策略
 	err = fit.NewGrpcClientBuilder(fit.GrpcBuilderConfig{
 		EtcdClient:         client,
-		ClientCertPath:     "./keys/client.crt",
-		ClientKeyPath:      "./keys/client.key",
-		RootCrtPath:        "./keys/ca.crt",
+		ClientCertPath:     "keys/client.crt",
+		ClientKeyPath:      "keys/client.key",
+		RootCrtPath:        "keys/ca.crt",
 		ServerNameOverride: "SourceBuild.cn",
 	})
 	if err != nil {
@@ -47,7 +47,7 @@ func main() {
 	//使用
 	// fit.GrpcDial需要搭配etcd使用, serveName是etcd中的key，会以前缀的方式查找key,当查找到多个key时会以轮训的方式选择请求地址。
 	// fit.Attempts 与 fit.Rule 二选一, fit.Rule 优先级更高。
-	conn, err := fit.GrpcDial(fit.JoinSvsPath("/serves", "rpc", "dpp"),
+	conn, err := fit.GrpcDial("/serves/rpc/dpp",
 		fit.Attempts(5),   //重试次数
 		fit.WithContext(), //记录一些东西，并写入到日志追踪中
 		//fit.Rule(""),      //熔断规则名称，需要提前初始化好，为空则不使用熔断器

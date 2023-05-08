@@ -19,12 +19,19 @@ func main() {
 		log.Fatalln(err)
 	}
 
+	defer fit.CloseEtcd()
+
 	//服务发现
 	result, err := fit.NewServiceDiscovery(context.Background(), fit.MainEtcdClientv3(), "/foo/user/")
 	if err != nil {
 		log.Fatalln(err)
 	}
-	// result.SelectByRand() 随机取一项
-	value, err := result.ParseValue(result.SelectByRand()) //提取
-	fmt.Println(err, value.Addr)
+	// result.SelectByRand() 随机取一个服务
+	value, err := result.SelectByRand()
+	if err != nil {
+		// err 服务不可用原因
+		log.Fatalln(err)
+	}
+
+	fmt.Println(value.Addr)
 }

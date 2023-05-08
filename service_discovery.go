@@ -3,40 +3,33 @@ package fit
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"go.etcd.io/etcd/client/v3"
 	"math/rand"
 	"time"
 )
 
 type LoadBalancingPolicy struct {
-	Addrs    []string
-	CurIndex int
+	Services []RegisterCenterValue
+	Desc     string
 }
 
 func NewLoadBalancing() *LoadBalancingPolicy {
 	return &LoadBalancingPolicy{}
 }
 
-func (l *LoadBalancingPolicy) Add(addr string) {
-	l.Addrs = append(l.Addrs, addr)
+func (l *LoadBalancingPolicy) Add(s RegisterCenterValue) {
+	l.Services = append(l.Services, s)
 }
 
 // SelectByRand random
-func (l *LoadBalancingPolicy) SelectByRand() string {
+func (l *LoadBalancingPolicy) SelectByRand() (RegisterCenterValue, error) {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	if len(l.Addrs) == 0 {
-		return ""
+	if len(l.Services) == 0 {
+		return RegisterCenterValue{}, errors.New(l.Desc)
 	}
-	index := r.Intn(len(l.Addrs))
-	return l.Addrs[index]
-}
-
-func (l *LoadBalancingPolicy) ParseValue(content string) (RegisterCenterValue, error) {
-	var rcv RegisterCenterValue
-	if err := json.Unmarshal([]byte(content), &rcv); err != nil {
-		return RegisterCenterValue{}, err
-	}
-	return rcv, nil
+	index := r.Intn(len(l.Services))
+	return l.Services[index], nil
 }
 
 func NewServiceDiscovery(ctx context.Context, client *clientv3.Client, prefix string) (*LoadBalancingPolicy, error) {
@@ -47,7 +40,17 @@ func NewServiceDiscovery(ctx context.Context, client *clientv3.Client, prefix st
 
 	var l LoadBalancingPolicy
 	for _, v := range result.Kvs {
-		l.Add(string(v.Value))
+		var rcv RegisterCenterValue
+		if err := json.Unmarshal(v.Value, &rcv); err == nil {
+			if rcv.Status == ServiceStatusRun {
+				l.Add(rcv)
+			} else if rcv.Reason != "" {
+				l.Desc = rcv.Reason
+			}
+		}
+	}
+	if len(l.Services) == 0 && l.Desc == "" {
+		l.Desc = "找不到可用的节点"
 	}
 	return &l, nil
 }

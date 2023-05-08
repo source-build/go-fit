@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 )
@@ -52,48 +53,52 @@ func main() {
 
 	//create tls
 	cred, err := fit.NewServiceTLS(&fit.CertPool{
-		CertFile: "../../keys/server.crt",
-		KeyFile:  "../../keys/server.key",
-		CaCert:   "../../keys/ca.crt",
+		CertFile: "keys/server.crt",
+		KeyFile:  "keys/server.key",
+		CaCert:   "keys/ca.crt",
 	})
 	if err != nil {
 		fit.Fatal("create tls failed err:" + err.Error())
 	}
 
-	///* 开启本地日志 */
-	//fit.SetLocalLogConfig(fit.LogEntity{
-	//	LogPath:      "./logs",          //修改日志路径，默认为根目录下的logs
-	//	FileName:     "track",           //日志文件名称
-	//	Formatter:    fit.JSONFormatter, //格式化方式,不传默认json。可选text(fit.TextFormatter)|json(fit.JSONFormatter)
-	//})
+	//开启本地日志 ...
+
 	//
-	///* ====== 创建 ====== */
-	////参数: 需要写入到的日志文件名称，需要预先配置好, 说白了就是上面的 FileName 字段
-	////如果不传则不写入本地日志
-	//gt := fit.NewLinkTrace("track")
-	////写入方式：LOCAL 本地(NewGinTrace 有参数时才生效) REMOTE 远程 CONSOLE 终端。
-	//gt.SetRecordMode("LOCAL")
-	////设置服务名称
-	//gt.SetServiceName("user")
-	////设置服务类型，如api服务、rpc服务等
-	//gt.SetServiceType("rpc")
+	/* ====== 创建 ====== */
+	//参数: 需要写入到的日志文件名称，需要预先配置好, 其实就是上面配置本地日志的 FileName 字段
+	//如果不传则不写入本地日志
+	gt := fit.NewLinkTrace("track")
+	//写入方式：LOCAL 本地(NewGinTrace 有参数时才生效) REMOTE 远程 CONSOLE 终端。
+	gt.SetRecordMode("LOCAL")
+	//设置服务名称
+	gt.SetServiceName("user")
+	//设置服务类型，如api服务、rpc服务等
+	gt.SetServiceType("rpc")
 	//
 	var opts []grpc.ServerOption
 	//
 	opts = append(opts, grpc.Creds(cred))
 
-	addr, _ := fit.GetRandomAvPortAndHost()
+	localIp, err := fit.GetOutBoundIP()
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	addr := net.JoinHostPort(localIp, strconv.Itoa(fit.GetListenPort(listen)))
 
 	//日志收集
-	//由于只能设置一个拦截器，如果你也想使用拦截器，则需要添加一个hook
+	//由于只能设置一个拦截器，如果想使用拦截器，需要添加一个hook
 	//gt.GrpcHook(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 	//	//如果不调用handler，将不会继续往下处理
 	//	res, err := handler(ctx, req)
 	//	return res, err
 	//})
-	//注意：这是一元拦截器
-	//****
+	////注意：这是一元拦截器
 	//opts = append(opts, grpc.UnaryInterceptor(gt.GrpcServerInterceptor()))
+
+	//
+	stat := fit.NewStatUnfinished()
+	opts = append(opts, grpc.UnaryInterceptor(stat.GrpcStatUnfinished()))
 
 	rpcServer := grpc.NewServer(opts...)
 

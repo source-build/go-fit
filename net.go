@@ -43,6 +43,10 @@ func GetRandomAvPort() (int, error) {
 	return listen.Addr().(*net.TCPAddr).Port, nil
 }
 
+func GetListenPort(ls net.Listener) int {
+	return ls.Addr().(*net.TCPAddr).Port
+}
+
 // GetRandomAvPortAndHost Obtain the IP+random available port number of this machine.
 func GetRandomAvPortAndHost() (string, error) {
 	localIp, err := GetOutBoundIP()
