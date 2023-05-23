@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"go.etcd.io/etcd/client/v3"
+	"google.golang.org/grpc"
 	"time"
 )
 
@@ -17,11 +18,18 @@ type EtcdHandle struct {
 	KeepRespChan <-chan *clientv3.LeaseKeepAliveResponse
 }
 
-func InitEtcd(config clientv3.Config) error {
+func InitEtcd(config clientv3.Config, notReconnect ...bool) error {
 	if client != nil {
 		return errors.New("instance already exists")
 	}
-
+	if len(notReconnect) == 0 {
+		if config.DialTimeout == 0 {
+			config.DialTimeout = time.Second * 30
+		}
+		config.DialOptions = []grpc.DialOption{
+			grpc.WithBlock(),
+		}
+	}
 	clientV3, err := clientv3.New(config)
 	if err != nil {
 		return err
@@ -48,12 +56,10 @@ func MainEtcdClientv3() *clientv3.Client {
 	return client
 }
 
-func CloseEtcd() error {
-	err := client.Close()
-	if err != nil {
-		return err
+func CloseEtcd() {
+	if err := client.Close(); err != nil {
+		Error(err)
 	}
-	return nil
 }
 
 // Get key

@@ -109,7 +109,10 @@ func main() {
 	s, err := fit.NewServiceRegister(&fit.ServiceRegister{
 		Ctx:        context.Background(),
 		Client:     client,
-		Key:        "/serves/rpc/dpp/" + fit.NewRandom().Char(5),
+		UseIsolate: true,
+		Env:        fit.EnvDevelopment,
+		//...
+		Key:        "/serves/rpc/test_system",
 		Value:      fit.NewRegisterCenterValue(addr),
 		Lease:      20,
 		SignalChan: quit,

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"go.etcd.io/etcd/client/v3"
 	"math/rand"
+	"path"
 	"time"
 )
 
@@ -32,7 +33,12 @@ func (l *LoadBalancingPolicy) SelectByRand() (RegisterCenterValue, error) {
 	return l.Services[index], nil
 }
 
-func NewServiceDiscovery(ctx context.Context, client *clientv3.Client, prefix string) (*LoadBalancingPolicy, error) {
+func NewServiceDiscovery(ctx context.Context, client *clientv3.Client, prefix string, notUseIsolate ...bool) (*LoadBalancingPolicy, error) {
+	if len(notUseIsolate) == 0 || !notUseIsolate[0] {
+		if mid := GetLocalMid(); mid != "" {
+			prefix = path.Join(prefix, mid)
+		}
+	}
 	result, err := client.Get(ctx, prefix, []clientv3.OpOption{clientv3.WithPrefix()}...)
 	if err != nil {
 		return nil, err

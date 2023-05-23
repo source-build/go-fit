@@ -215,9 +215,9 @@ func (t traceHandler) AfterProcess(trace *fit.Trace) {
 func main() {
 	/* 开启本地日志 */
 	fit.SetLocalLogConfig(fit.LogEntity{
-		LogPath:      "./logs",          //修改日志路径，默认为根目录下的logs
-		FileName:     "track",           //日志文件名称
-		Formatter:    fit.JSONFormatter, //格式化方式,不传默认json。可选text(fit.TextFormatter)|json(fit.JSONFormatter)
+		LogPath:   "./logs",          //修改日志路径，默认为根目录下的logs
+		FileName:  "track",           //日志文件名称
+		Formatter: fit.JSONFormatter, //格式化方式,不传默认json。可选text(fit.TextFormatter)|json(fit.JSONFormatter)
 	})
 
 	//初始化mysql
@@ -773,33 +773,36 @@ func main() {
 ```
 
 消费端代码
->MQ
+> MQ
+
 ```go
 //设置mq地址
-	fit.SetMqURL("amqp://guest:guest@192.168.1.1:5672")
-	//新建实例
-	mq, err := fit.NewRabbitMQ()
-	if err != nil {
-		log.Fatal(err)
-	}
-	//释放资源,建议NewRabbitMQ获取实例后 配合defer使用
-	defer mq.Close()
+fit.SetMqURL("amqp://guest:guest@192.168.1.1:5672")
+//新建实例
+mq, err := fit.NewRabbitMQ()
+if err != nil {
+log.Fatal(err)
+}
+//释放资源,建议NewRabbitMQ获取实例后 配合defer使用
+defer mq.Close()
 
-	//创建交换器
-	ex := mq.DefExchangeDeclare("service_monitor", fit.KIND_DIRECT, false, true)
-	//随机生成队列名
-	msgs, err := ex.QueueDeclare("", false, true, false, false, nil).
-		ReceiveRouting("monitor") //路由key
-	if err != nil {
-		log.Fatalln(err)
-	}
-	for msg := range msgs {
-		fmt.Println("message:", string(msg.Body))
-		//主动应答
-		err := msg.Ack(true)
-	}
+//创建交换器
+ex := mq.DefExchangeDeclare("service_monitor", fit.KIND_DIRECT, false, true)
+//随机生成队列名
+msgs, err := ex.QueueDeclare("", false, true, false, false, nil).
+ReceiveRouting("monitor") //路由key
+if err != nil {
+log.Fatalln(err)
+}
+for msg := range msgs {
+fmt.Println("message:", string(msg.Body))
+//主动应答
+err := msg.Ack(true)
+}
 ```
->HTTP
+
+> HTTP
+
 ```go
 package main
 
@@ -824,45 +827,67 @@ func main() {
 	g.Run(":8008")
 }
 ```
+
 etcd中的key格式示例
 > api/user/ikkl 加上后面的节点名称（ikkl）用于指定那个服务采集机器负载信息
-etcd中的value配置示例
+> etcd中的value配置示例
+
 ```json
-{  
-  stage: "INIT", //阶段，可选值 INIT、WORK
+{
+  stage: "INIT",
+  //阶段，可选值 INIT、WORK
   //当etcd服务终止或找不到etcd存活时，将自动退出任务，如果为false，则会阻塞一直等到etcd服务恢复后继续执行任务。 
-  downtimeAutoQuit:true, 
-  returnWorkTask: true, //是否返回当前工作的协程数量
-  returnMem: true, //是否返回内存信息
-  returnCpu: true, //是否返回CPU信息
-  returnIoCount: true, //是否获取网络读写字节／包的个数
-  subType: "", //接收类型 HTTP、MQ
-  subHttpUrl: "", //http url，默认post方式，subType = HTTP生效
-  subHttpToken: "", //http 请求时需要携带的token，如果subHttpHeader存在,则该字段会被覆盖,subType = HTTP生效
-  subHttpHeader: "", //subType = HTTP生效
-  mqWorkType: "", //simple 简单模式、 work 工作模式、 publish 发布订阅模式 routing 模式
-  mqDeclareName: "", //声明时的队列名称，为空则随机生成
-  mqDeclareDurable: false, //队列是否需要持久化，不持久化重启mq将失效。
-  mqAutoDelete: false, //自动删除？
-  mqExchangeName: "", //声明时的交换机名称，注意：simple、work模式时不需要填
-  mqExchangeDurable: false, //交换机是否需要持久化，不持久化重启mq将失效。
+  downtimeAutoQuit: true,
+  returnWorkTask: true,
+  //是否返回当前工作的协程数量
+  returnMem: true,
+  //是否返回内存信息
+  returnCpu: true,
+  //是否返回CPU信息
+  returnIoCount: true,
+  //是否获取网络读写字节／包的个数
+  subType: "",
+  //接收类型 HTTP、MQ
+  subHttpUrl: "",
+  //http url，默认post方式，subType = HTTP生效
+  subHttpToken: "",
+  //http 请求时需要携带的token，如果subHttpHeader存在,则该字段会被覆盖,subType = HTTP生效
+  subHttpHeader: "",
+  //subType = HTTP生效
+  mqWorkType: "",
+  //simple 简单模式、 work 工作模式、 publish 发布订阅模式 routing 模式
+  mqDeclareName: "",
+  //声明时的队列名称，为空则随机生成
+  mqDeclareDurable: false,
+  //队列是否需要持久化，不持久化重启mq将失效。
+  mqAutoDelete: false,
+  //自动删除？
+  mqExchangeName: "",
+  //声明时的交换机名称，注意：simple、work模式时不需要填
+  mqExchangeDurable: false,
+  //交换机是否需要持久化，不持久化重启mq将失效。
   // 当mqWorkType=routing时，需要设置此字段接收时才会与路由精确匹配上，
   //如果为空则默认路由名称为 monitor。
-  mqRoutingKey:"", 
-  duration:3, //多久发送一次，默认5s，单位s
+  mqRoutingKey: "",
+  duration: 3,
+  //多久发送一次，默认5s，单位s
   //最大重试连接次数，当etcd服务不可用时，会进行重试.
   //注意，这里重试指的是etcd。
-  retryCount:5,
+  retryCount: 5
 };
 ```
->注意:
-如果使用http的方式接收，响应状态码!=200时，会重试请求最多三次！
-INIT：初始状态、 WORK：工作状态
-首次应为INIT，INIT阶段return*字段不生效，也就是说，stage=INIT时，不需要return*开头的字段，随后服务监听接收到该值后，假设你选择接收类型为mq，那么会向mq发送一条包含服务所在的机器信息，这样就能拿到服务所在的机器唯一id，最后你再确定由哪一台机器负责采集负载信息。一些情况下同一台机器中会部署多个服务集群等，如果每个服务都要采集机器信息，这是没有必要的，因为他们都在同一台机器上。
+
+> 注意:
+> 如果使用http的方式接收，响应状态码!=200时，会重试请求最多三次！
+> INIT：初始状态、 WORK：工作状态
+> 首次应为INIT，INIT阶段return*字段不生效，也就是说，stage=INIT时，不需要return*
+>
+开头的字段，随后服务监听接收到该值后，假设你选择接收类型为mq，那么会向mq发送一条包含服务所在的机器信息，这样就能拿到服务所在的机器唯一id，最后你再确定由哪一台机器负责采集负载信息。一些情况下同一台机器中会部署多个服务集群等，如果每个服务都要采集机器信息，这是没有必要的，因为他们都在同一台机器上。
 
 ### rabbitMQ
 
 #### 使用
+
 ```go
 package main
 
@@ -1040,6 +1065,7 @@ func main() {
 	//}
 }
 ```
+
 #### 自定义
 
 以上只提供了对我而言比较方便的用法，如果不满足你的需求，那就自己调用 **mq.Channel()**
@@ -1054,109 +1080,132 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/alibaba/sentinel-golang/core/circuitbreaker"
 	"github.com/source-build/go-fit"
+	"github.com/source-build/go-fit/pb"
 	clientv3 "go.etcd.io/etcd/client/v3"
-	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 	"log"
 	"time"
 )
 
-// ClientInterceptor 客户端拦截器
-func ClientInterceptor(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-	start := time.Now()
-	err := invoker(ctx, method, req, reply, cc, opts...)
-	log.Printf("method == %s ; req == %v ; rep == %v ; duration == %s ; error == %v\n", method, req, reply, time.Since(start), err)
-	return err
-}
-
 func main() {
 	//连接etcd
 	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{"127.0.0.1:2379"},
+		Endpoints:   []string{"127.0.0.1:2479"},
 		DialTimeout: time.Second * 5,
 	})
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	err = fit.InitSentinel(fit.SentinelConfig{
-		Version: "1.0.0",
-		AppName: "userApi",
-		LogDir:  "", //日志文件位置，秒级日志，为空则不输出日志
-	})
-	if err != nil {
-		log.Fatalln(err)
-	}
-
-	// https://sentinelguard.io/zh-cn/docs/golang/circuit-breaking.html
-	breakerRules := []*circuitbreaker.Rule{
-		// 错误比例规则,统计周期内资源请求访问异常的比例大于设定的阈值，则接下来的熔断周期内对资源的访问会自动地被熔断
-		{
-			Resource:         "errorRatio",
-			Strategy:         circuitbreaker.ErrorRatio,
-			RetryTimeoutMs:   3000, //熔断触发后持续的时间（单位为 ms）
-			MinRequestAmount: 10,   //静默请求数
-			StatIntervalMs:   5000, //统计周期
-			Threshold:        0.4,  //错误比例的阈值(小数表示，比如0.1表示10%)
-		},
-	}
-	//加载熔断规则
-	if err := fit.LoadBreakerRule(breakerRules); err != nil {
-		log.Fatalln(err)
-	}
-
-	//初始化客户端解析器
-	//发起grpc请求时会自动解析并使用负载均衡策略
-	err = fit.NewGrpcClientBuilder(fit.GrpcBuilderConfig{
-		EtcdClient:         client,
-		ClientCertPath:     "./keys/client.crt",
-		ClientKeyPath:      "./keys/client.key",
-		RootCrtPath:        "./keys/ca.crt",
-		ServerNameOverride: "SourceBuild.cn",
-	})
-	if err != nil {
-		log.Fatalln(err)
-	}
-	
-	/* ====== 创建日志追踪 ====== */
+	/* ====== 创建日志收集 ====== */
 	//参数: fileName 需要写入到的日志文件名称，需要预先配置好，不传则不写入到本地日志
 	gt := fit.NewLinkTrace()
 	//写入方式：LOCAL 本地(NewGinTrace 有参数时才生效) REMOTE 远程 CONSOLE 终端。
 	//gt.SetRecordMode("LOCAL")
 	//设置服务名称
-	gt.SetServiceName("msgpush")
+	gt.SetServiceName("user")
 	//设置服务类型，如api服务、rpc服务等
 	gt.SetServiceType("api")
 
-	//参数一:服务名称，下面会讲
-	//参数二:配置
-	//fit.Attempts(5) //使用重试策略，参数为重试次数
-	//fit.Rule("errorRatio") //使用熔断机制，与重试策略而二选一
-	//fit.DialOption() //添加gRPC配置，具体可以看看gRPC文档
-	//fit.WithContext()//记录一些东西并写入到日志追踪里
-	//注意：服务名称，也就是etcd的key
-	// 如果etcd中有多个服务注册,比如有这些key: /serves/rpc/user/1 /serves/rpc/user/2 /serves/rpc/user/3
-	// 那么调用GrpcDial时只需要写 /serves/rpc/user 这样就会以轮训的方式依次请求 1 2 3
-	conn, err := fit.GrpcDial("/serves/rpc/user",
-		fit.Attempts(5),
-		fit.DialOption(grpc.WithUnaryInterceptor(ClientInterceptor)), //添加客户端拦截器
-	)
-	if err != nil {
-		log.Fatalln("连接失败", err)
-	}
-	defer fit.CloseGrpc(conn)
-
-	e := pb.NewEmailServiceClient(conn)
-	res, err := e.SendEmailVerificationCode(nil, &pb.VerCodeRequest{
-		Email:  "123@qq.com",
-		Expire: 66,
+	//初始化客户端解析器,全局只能执行一次，例如放到 init 中。
+	//发起grpc请求时会自动解析并使用负载均衡策略
+	err = fit.NewGrpcClientBuilder(fit.GrpcBuilderConfig{
+		EtcdClient:         client,
+		ClientCertPath:     "keys/client.crt",
+		ClientKeyPath:      "keys/client.key",
+		RootCrtPath:        "keys/ca.crt",
+		ServerNameOverride: "SourceBuild.cn",
 	})
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	fmt.Println(res.Code, res.Msg)
+	// ************************** 使用 ***************************
+	// fit.GrpcDial 与 fit.GrpcDialContext 需要搭配etcd使用, serveName是etcd中的key，会以前缀的方式查找key,当查找到多个key时会以轮训的方式选择请求地址。
+	// 必要的参数
+	// fit.Attempts： 重试次数，不能使用在 fit.GrpcDial 函数中，因为它是非阻塞的，也就意味着根本不会返回网络错误。
+	// fit.Rule： 熔断策略使用的是 sentinel-go
+	// fit.Attempts 与 fit.Rule 二选一, fit.Rule 优先级更高。
+
+	// Context 阻塞版
+	// 阻塞。顾名思义，由于建立连接需要一些时间，默认在拨号时会阻塞直到与服务器建立成功或失败，
+	// 默认在拨号时会阻塞直到与服务器建立成功或失败
+	conn, err := fit.GrpcDialContext("/serves/rpc/test_system",
+		fit.Attempts(15),  //重试次数
+		fit.WithContext(), //记录一些东西，并写入到日志收集中
+		//fit.Rule(""),      //熔断规则名称，需要提前初始化好，为空则不使用熔断器
+	
+		//不使用超时时间，默认超时时间为10s。
+		//注意，这可能会导致一直阻塞。
+		//fit.NotTimeout(),
+	
+		//超时时间(默认10s)。
+		fit.WithTimeout(time.Second*5),
+	
+		//这里可以传递一个context，如果不传递，内部会默认创建一个 context.Background()。
+		//fit.Context(),
+	)
+
+	// 非阻塞版
+	// 立即返回，即使没有连接成功或失败。
+	// 由于是立即返回的，所以在我看来 context 可有可无。
+	conn, err := fit.GrpcDial("/serves/rpc/test_system",
+		fit.WithContext(), //记录一些东西，并写入到日志收集中
+		fit.Rule(""),      //熔断规则名称，需要提前初始化好，为空则不使用熔断器
+	)
+
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer fit.CloseGrpc(conn)
+
+	fmt.Println("成功")
+	time.Sleep(time.Second * 5)
+
+	check, err := pb.NewPhoneLoginSmsVerCodeClient(conn).Check(context.Background(), &pb.CheckRequest{
+		PhoneCode: "2323",
+		Code:      1212,
+	})
+	if err != nil {
+		log.Fatalln(status.Convert(err).Message())
+	}
+	fmt.Println(check.Msg)
+
+	/* 这里以gin为例 */
+	//g := gin.New()
+	//g.Use(gt.GinTraceHandler())
+	//g.GET("/", func(c *gin.Context) {
+	//	//传递fit.WithContext()会在拦截器中记录操作信息，耗时等,
+	//	conn, err := fit.GrpcDial("/serves/rpc/dpp", fit.Attempts(5), fit.WithContext())
+	//	if err != nil {
+	//		log.Fatalln(err)
+	//	}
+	//	defer fit.CloseGrpc(conn)
+	//
+	//	resp := pb.NewPhoneLoginSmsVerCodeClient(conn)
+	//	//想记录rpc调用信息，需要传递context
+	//	res, err := resp.SendSteam(c, &pb.CheckRequest{
+	//		PhoneCode: "OK",
+	//		Code:      200,
+	//	})
+	//	if err != nil {
+	//		log.Fatalln("错误", err)
+	//	}
+	//	for {
+	//		recv, err := res.Recv()
+	//		if err == io.EOF {
+	//			break
+	//		}
+	//		if err != nil {
+	//			break
+	//		}
+	//		fmt.Println(recv)
+	//	}
+	//
+	//	c.String(http.StatusOK, "OK")
+	//})
+	//g.Run(":8005")
 }
 ```
 
@@ -1164,13 +1213,22 @@ func main() {
 
 #### 服务注册
 
-服务启动时将服务注册到etcd中，可以通过etcd监控与发现服务
+> 服务启动时将服务注册到etcd中
+
+✅ 开发环境中同一个etcd多个网络环境互不影响
+
+✅ 同一个key可以注册多个服务,自动生成后缀
+
+✅ 由网络、etcd问题导致的意外退出可以配置为自动重试
+
+✅ 修改value后自动更新本地服务状态
 
 ```go
 package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/source-build/go-fit"
 	"go.etcd.io/etcd/client/v3"
@@ -1181,12 +1239,16 @@ import (
 	"syscall"
 	"time"
 )
-
 func main() {
 	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{"127.0.0.1:2479"},
-		DialTimeout: time.Second * 5,
+		Endpoints:   []string{"127.0.0.1:2379"},
+		DialTimeout: time.Second * 60,
+		DialOptions: []grpc.DialOption{
+			grpc.WithBlock(),
+		},
 	})
+
+	defer client.Close()
 
 	completeChan := make(chan struct{}, 1)
 	defer close(completeChan)
@@ -1201,7 +1263,7 @@ func main() {
 	/* grpc 使用 */
 	var opts []grpc.ServerOption
 
-	//使用日志收集
+	//日志收集
 	//由于只能设置一个拦截器，如果想使用拦截器，需要添加一个hook
 	gt := fit.NewLinkTrace()
 	gt.GrpcHook(func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
@@ -1227,21 +1289,52 @@ func main() {
 	//stat.Restore()        //恢复处理请求
 
 	addr, _ := fit.GetRandomAvPortAndHost()
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	c := make(chan os.Signal)
 	signal.Notify(c, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		var a string
+		for {
+			fmt.Scanf("输入:%s", &a)
+			fmt.Println(333)
+			c <- os.Interrupt
+		}
+	}()
 	s, err := fit.NewServiceRegister(&fit.ServiceRegister{
 		Ctx:    ctx,
 		Client: client,
-		//状态发生改变会调用这个函数
+
+		//重试次数。到达指定次数仍无法连接的，向 c 写入中断信号。
+		RetryCount: 5,
+		//重试回调, count:当前重试次数。
+		RetryFunc: func(count int) {},
+		//重试成功回调。
+		RetryOkFunc: func() {},
+		//重试间隔时间,默认 5s。
+		//RetryWaitDuration: time.Second * 10,
+		//重试间隔时间是上一次两倍
+		//RetryWaitMultiple: true,
+
+		// 避免key冲突(仅 fit.EnvDevelopment(开发环境) 有效)。
+		// 当多人协同开发时，由于可能共用的是同一个etcd而开发环境又处于不同的局域网之中，在服务注册时可能会导致key被覆盖。
+		// 如果启用,在服务注册时会在key中加一层字符串,这个字符串可以理解为你的机器码,这样在服务发现时就只会寻找和本机有关的key。
+		// *注意： 在生产环境中不应该使用它。
+		UseIsolate: true,
+		Env:        fit.EnvDevelopment,
+
+		//Key 命名建议
+		// --> /项目名/svs/服务类型/服务名称
+		// 默认会在服务后面生成6位数的随机字符,因为单个服务可能会启动多个进程监听不同的端口已达到负载均衡的效果。
+		// 如果你想将完整的字符串作为服务在注册中心的key,那么使用`NoSuffix:true`关闭它,它将不会再生成随机后缀。
+		Key:   "/ht/svs/api/test_user",
+		Value: fit.NewRegisterCenterValue(addr),
 		OnStatusChange: func(value fit.RegisterCenterValue, this *fit.ServiceRegister) {
-			// 关闭服务指令。等待所有请求完成后调用 fit.Shutdown() 关闭服务
+			// 关闭指令。等待所有请求完成后调用 fit.Shutdown() 关闭服务
 			// 最终状态，不建议再修改状态
 			if value.Status == fit.ServiceStatusWaitDone {
 				// TODO ...等待正在进行的请求处理完成
-				stat.FiringWaitDone() //拦截新的请求
+				stat.FiringWaitDone() //拦截请求
 				<-completeChan
 				this.Shutdown()
 			}
@@ -1264,24 +1357,22 @@ func main() {
 				}
 			}
 		},
-		Key:        "/foo/user/192.168.1.6:8080",
-		Value:      fit.NewRegisterCenterValue(addr),
 		Lease:      15,
-		SignalChan: c, //传递一个chan，当etcd离线或key失效时会向其chan写入信号，默认为 os.Kill
+		SignalChan: c, //传递一个chan，当退出时会向其写入信号，默认为 os.Interrupt
 		SignalTag:  os.Kill,
-		OnBack:     func() {}, //当etcd离线或key失效时触发
+		//当etcd离线或key失效时触发
+		OnBack: func() {},
 	})
 	if err != nil {
 		log.Fatalln(err)
 	}
 
 	<-c
-	s.Close()
+	s.Close() //这里是关闭资源而不是关闭etcd客户端，注意调用顺序。
 }
 ```
 
 #### 服务发现
-
 ```go
 package main
 
@@ -1297,7 +1388,7 @@ import (
 func main() {
 	//连接
 	err := fit.InitEtcd(clientv3.Config{
-		Endpoints:   []string{"127.0.0.1:2479"},
+		Endpoints:   []string{"127.0.0.1:2379"},
 		DialTimeout: time.Second * 5,
 	})
 	if err != nil {
@@ -1309,7 +1400,7 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	sb := result.SelectByRand() // 随机取一项
+	sb := result.SelectByRand()         // 随机取一项
 	value, err := result.ParseValue(sb) //提取
 	fmt.Println(err, value.Addr)
 }
@@ -1798,10 +1889,11 @@ import (
 )
 
 func main() {
-	//连接
+	//连接到etcd
+	//默认自动重连的超时时间为 30s，使用DialTimeout设置超时时间。。
+	//不使用重连只需要传入第二个参数即可。
 	err := fit.InitEtcd(clientv3.Config{
 		Endpoints:   []string{"127.0.0.1:2379"},
-		DialTimeout: time.Second * 5,
 	})
 	if err != nil {
 		log.Fatalln(err)
@@ -1813,6 +1905,9 @@ func main() {
 		log.Fatalln(err)
 	}
 	fmt.Println(res)
+	
+	//获取etcd client
+	//fit.MainEtcdClientv3()
 }
 ```
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"go.etcd.io/etcd/client/v3"
+	"path"
 	"sync"
 	"time"
 
@@ -103,10 +104,14 @@ func (r *Resolver) Close() {
 }
 
 func (r *Resolver) watcher() {
+	if mid := GetLocalMid(); mid != "" {
+		r.prefix = path.Join(r.prefix, mid)
+	}
 	response, err := r.Client.Get(context.Background(), r.prefix, clientv3.WithPrefix())
 	if err != nil {
 		return
 	}
+
 	addresses := make([]resolver.Address, 0)
 	var desc string
 	for _, kv := range response.Kvs {

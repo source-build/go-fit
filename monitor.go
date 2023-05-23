@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/avast/retry-go/v4"
+	"github.com/denisbrodbeck/machineid"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/net"
-	"github.com/super-l/machine-code/machine"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"golang.org/x/net/context"
@@ -545,23 +545,18 @@ func checkParams(obj map[string]any) error {
 	return nil
 }
 
-func GetMachineCode() string {
-	cpuid, _ := machine.GetCpuId()
-	if cpuid != "" {
-		return cpuid
+func GetMachineCode(myApp ...string) string {
+	var id string
+	var err error
+	if len(myApp) > 0 {
+		id, err = machineid.ProtectedID(myApp[0])
+	} else {
+		id, err = machineid.ID()
 	}
-
-	uuid, _ := machine.GetPlatformUUID()
-	if uuid != "" {
-		return uuid
+	if err != nil {
+		return ""
 	}
-
-	macInfo, _ := machine.GetMACAddress()
-	if macInfo != "" {
-		return macInfo
-	}
-
-	return ""
+	return id
 }
 
 func GetIOCounters() (io IoCounter) {
