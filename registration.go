@@ -40,7 +40,7 @@ type ServiceRegister struct {
 
 	// Whether to use environment isolation is only effective for the development environment,
 	// as it uses the same registry. When collaborating on development, multiple services may be located on different LANs, resulting in service discovery using a non local network.
-	// It is effective when 'env' is' development '
+	// It is effective when 'env' is 'development'
 	UseIsolate bool
 
 	// If it is a development environment and UseIsolate is true, then this service will be bound to the machine where it is located.

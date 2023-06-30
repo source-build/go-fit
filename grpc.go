@@ -82,25 +82,21 @@ func GrpcDial(serveName string, opts ...Option) (*grpc.ClientConn, error) {
 
 	if len(config.rule) > 0 {
 		var conn *grpc.ClientConn
+		var err error
 		e, b := sentinel.Entry(config.rule)
 		if b != nil {
 			return nil, errors.New("failed to establish connection. The failure reason may be external service error")
 		} else {
-			cc, err := grpc.Dial(target, config.dialOptions...)
+			conn, err = grpc.Dial(target, config.dialOptions...)
 			if err != nil {
 				sentinel.TraceError(e, err)
 			}
-			conn = cc
 			e.Exit()
 		}
-		return conn, nil
+		return conn, err
 	}
 
-	conn, err := grpc.Dial(target, config.dialOptions...)
-	if err != nil {
-		return nil, err
-	}
-	return conn, nil
+	return grpc.Dial(target, config.dialOptions...)
 }
 
 func GrpcDialContext(serveName string, opts ...Option) (*grpc.ClientConn, error) {
@@ -130,18 +126,18 @@ func GrpcDialContext(serveName string, opts ...Option) (*grpc.ClientConn, error)
 
 	if len(config.rule) > 0 {
 		var conn *grpc.ClientConn
+		var err error
 		e, b := sentinel.Entry(config.rule)
 		if b != nil {
 			return nil, errors.New("failed to establish connection. The failure reason may be external service error")
 		} else {
-			cc, err := grpc.DialContext(config.ctx, target, config.dialOptions...)
+			conn, err = grpc.DialContext(config.ctx, target, config.dialOptions...)
 			if err != nil {
 				sentinel.TraceError(e, err)
 			}
-			conn = cc
 			e.Exit()
 		}
-		return conn, nil
+		return conn, err
 	}
 
 	if config.attempts > 1 {
@@ -163,17 +159,10 @@ func GrpcDialContext(serveName string, opts ...Option) (*grpc.ClientConn, error)
 				return retry.BackOffDelay(n, err, c)
 			}),
 		)
-		if err != nil {
-			return nil, err
-		}
-		return conn, nil
+		return conn, err
 	}
 
-	conn, err := grpc.DialContext(config.ctx, target, config.dialOptions...)
-	if err != nil {
-		return nil, err
-	}
-	return conn, nil
+	return grpc.DialContext(config.ctx, target, config.dialOptions...)
 }
 
 func CloseGrpc(conn *grpc.ClientConn) {

@@ -22,7 +22,9 @@ func InitSentinel(cf SentinelConfig) error {
 	if cf.LogDir != "" {
 		conf.Sentinel.Log.Dir = cf.LogDir
 	}
-	conf.Version = cf.Version
+	if cf.Version != "" {
+		conf.Version = cf.Version
+	}
 	conf.Sentinel.App.Name = cf.AppName
 	err := sentinel.InitWithConfig(conf)
 	if err != nil {

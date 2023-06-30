@@ -21,13 +21,11 @@ type LinkTraceRequest struct {
 	Method string      `json:"method"`
 	Url    string      `json:"url"`
 	Header interface{} `json:"header"`
-	Body   interface{} `json:"body"`
 }
 
 // LinkTraceResponse response
 type LinkTraceResponse struct {
 	Header   interface{} `json:"header"`
-	Body     interface{} `json:"body"`
 	HttpCode int         `json:"http_code"`
 	HttpMsg  string      `json:"http_msg"`
 	Cost     string      `json:"cost"`
@@ -214,6 +212,8 @@ type LinkTrace struct {
 	trace         *Trace
 	hook          Hook
 	grpcHook      GrpcHookHandler
+	env           EnvType
+	DevOutputNO   bool
 }
 
 // NewLinkTrace create a new tracker.
@@ -223,12 +223,17 @@ func NewLinkTrace(fileName ...string) *LinkTrace {
 		logFileName = fileName[0]
 	}
 	return &LinkTrace{
+		env:         EnvDevelopment,
 		LogFileName: logFileName,
 	}
 }
 
 func (g *LinkTrace) SetRecordMode(modes ...string) {
 	g.LogRecordMode = modes
+}
+
+func (g *LinkTrace) SetDevOutputNO() {
+	g.DevOutputNO = true
 }
 
 func (g *LinkTrace) SetServiceName(name string) {
@@ -249,6 +254,11 @@ func (g *LinkTrace) GrpcHook(fn GrpcHookHandler) {
 
 func (g *LinkTrace) GinTraceHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if g.DevOutputNO && g.env == EnvDevelopment {
+			c.Next()
+			return
+		}
+
 		writer := responseWriter{
 			c.Writer,
 			bytes.NewBuffer([]byte{}),
@@ -279,11 +289,9 @@ func (g *LinkTrace) GinTraceHandler() gin.HandlerFunc {
 			Method: c.Request.Method,
 			Url:    c.Request.URL.String(),
 			Header: c.Request.Header,
-			Body:   c.Request.Body,
 		}
 		trace.Response = &LinkTraceResponse{
 			Header:   writer.Header(),
-			Body:     writer.b.String(),
 			HttpCode: writer.Status(),
 		}
 		if writer.Status() == http.StatusOK {
@@ -315,6 +323,10 @@ func (g *LinkTrace) GinTraceHandler() gin.HandlerFunc {
 
 func (g *LinkTrace) GrpcServerInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		if g.DevOutputNO && g.env == EnvDevelopment {
+			return handler(ctx, req)
+		}
+
 		md, ok := metadata.FromIncomingContext(ctx)
 		if !ok {
 			return nil, errors.New("metadata.FromIncomingContext get fail")
@@ -352,11 +364,6 @@ func (g *LinkTrace) GrpcServerInterceptor() grpc.UnaryServerInterceptor {
 		trace.Request = &LinkTraceRequest{
 			Method: info.FullMethod,
 			Header: md,
-			Body:   req,
-		}
-
-		trace.Response = &LinkTraceResponse{
-			Body: res,
 		}
 
 		trace.Error = err
