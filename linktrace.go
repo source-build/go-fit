@@ -213,7 +213,7 @@ type LinkTrace struct {
 	hook          Hook
 	grpcHook      GrpcHookHandler
 	env           EnvType
-	DevOutputNO   bool
+	devOutputNO   bool
 }
 
 // NewLinkTrace create a new tracker.
@@ -232,8 +232,12 @@ func (g *LinkTrace) SetRecordMode(modes ...string) {
 	g.LogRecordMode = modes
 }
 
+func (g *LinkTrace) SetEnv(env EnvType) {
+	g.env = env
+}
+
 func (g *LinkTrace) SetDevOutputNO() {
-	g.DevOutputNO = true
+	g.devOutputNO = true
 }
 
 func (g *LinkTrace) SetServiceName(name string) {
@@ -254,7 +258,7 @@ func (g *LinkTrace) GrpcHook(fn GrpcHookHandler) {
 
 func (g *LinkTrace) GinTraceHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if g.DevOutputNO && g.env == EnvDevelopment {
+		if g.devOutputNO && g.env == EnvDevelopment {
 			c.Next()
 			return
 		}
@@ -323,7 +327,7 @@ func (g *LinkTrace) GinTraceHandler() gin.HandlerFunc {
 
 func (g *LinkTrace) GrpcServerInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		if g.DevOutputNO && g.env == EnvDevelopment {
+		if g.devOutputNO && g.env == EnvDevelopment {
 			return handler(ctx, req)
 		}
 
