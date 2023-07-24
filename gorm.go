@@ -4,24 +4,54 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 	"time"
 )
 
 var mysqlClient *gorm.DB
 
 type DefaultConfigMysql struct {
-	User string
-	Pass string
-	IP   string
-	Port string
-	DB   string
+	User      string
+	Pass      string
+	IP        string
+	Port      string
+	DB        string
+	FitLogger *logrus.Logger
+	Logger    logger.Interface
+	LogMode   logger.LogLevel
 }
 
 func NewMysqlDefConnect(config DefaultConfigMysql, useTrace bool) error {
 	dsn := fmt.Sprintf("%v:%v@tcp(%v:%v)/%v?charset=utf8mb4&parseTime=True&loc=Local", config.User, config.Pass, config.IP, config.Port, config.DB)
-	client, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	cf := gorm.Config{}
+	if config.LogMode == 0 {
+		config.LogMode = logger.Error
+	}
+
+	if config.FitLogger != nil {
+		logLevel := logger.Silent
+		switch globalLogLevel {
+		case DebugLevel:
+			logLevel = logger.Info
+		}
+
+		cf.Logger = logger.New(
+			config.FitLogger,
+			logger.Config{
+				LogLevel: logLevel,
+			},
+		)
+	}
+
+	if config.Logger != nil {
+		cf.Logger = config.Logger
+		cf.Logger.LogMode(config.LogMode)
+	}
+
+	client, err := gorm.Open(mysql.Open(dsn), &cf)
 	if err != nil {
 		return err
 	}

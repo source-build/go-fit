@@ -3,12 +3,14 @@ package fit
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/fatih/color"
 	"github.com/natefinch/lumberjack"
 	"github.com/sirupsen/logrus"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"time"
+	"unicode/utf8"
 )
 
 var defLog string
@@ -97,6 +99,7 @@ type LogEntity struct {
 	IsDefaultLog bool
 	Formatter    int
 	ReportCaller bool
+	NoColor      bool
 }
 
 func GetLogInstances() map[string]*logrus.Logger {
@@ -120,8 +123,7 @@ type Level interface {
 }
 
 type reportCaller struct {
-	file string
-	line int
+	join string
 }
 
 type RemoteLogTemplater interface {
@@ -143,8 +145,8 @@ func LocalLog(name ...string) Local {
 func (l Local) Debug(v ...interface{}) {
 	var caller reportCaller
 	if _, file, line, ok := runtime.Caller(1); ok {
-		caller.file = file
-		caller.line = line
+		_, fileName := filepath.Split(file)
+		caller.join = StringSpliceTag(":", fileName, strconv.Itoa(line))
 	}
 	writeLocalLogInstance(l.instanceName, DebugLevel, getBody(v...), caller)
 }
@@ -152,8 +154,8 @@ func (l Local) Debug(v ...interface{}) {
 func (l Local) Info(v ...interface{}) {
 	var caller reportCaller
 	if _, file, line, ok := runtime.Caller(1); ok {
-		caller.file = file
-		caller.line = line
+		_, fileName := filepath.Split(file)
+		caller.join = StringSpliceTag(":", fileName, strconv.Itoa(line))
 	}
 	writeLocalLogInstance(l.instanceName, InfoLevel, getBody(v...), caller)
 }
@@ -161,8 +163,8 @@ func (l Local) Info(v ...interface{}) {
 func (l Local) Error(v ...interface{}) {
 	var caller reportCaller
 	if _, file, line, ok := runtime.Caller(1); ok {
-		caller.file = file
-		caller.line = line
+		_, fileName := filepath.Split(file)
+		caller.join = StringSpliceTag(":", fileName, strconv.Itoa(line))
 	}
 	writeLocalLogInstance(l.instanceName, ErrorLevel, getBody(v...), caller)
 }
@@ -170,8 +172,8 @@ func (l Local) Error(v ...interface{}) {
 func (l Local) Warning(v ...interface{}) {
 	var caller reportCaller
 	if _, file, line, ok := runtime.Caller(1); ok {
-		caller.file = file
-		caller.line = line
+		_, fileName := filepath.Split(file)
+		caller.join = StringSpliceTag(":", fileName, strconv.Itoa(line))
 	}
 	writeLocalLogInstance(l.instanceName, WarnLevel, getBody(v...), caller)
 }
@@ -179,8 +181,8 @@ func (l Local) Warning(v ...interface{}) {
 func (l Local) Fatal(v ...interface{}) {
 	var caller reportCaller
 	if _, file, line, ok := runtime.Caller(1); ok {
-		caller.file = file
-		caller.line = line
+		_, fileName := filepath.Split(file)
+		caller.join = StringSpliceTag(":", fileName, strconv.Itoa(line))
 	}
 	writeLocalLogInstance(l.instanceName, FatalLevel, getBody(v...), caller)
 }
@@ -194,12 +196,22 @@ type LogBodyContent struct {
 func getBody(v ...interface{}) map[string]interface{} {
 	var body string
 	if len(v) == 1 {
+		eVal, ok := v[0].(error)
+		if ok {
+			body = eVal.Error()
+			if utf8.RuneCountInString(body) > stackLength {
+				body = SubStrDecodeRuneInString(body, stackLength)
+			}
+			return map[string]interface{}{"msg": "An error has occurred", "err": body}
+		}
+
 		bVal, ok := v[0].(string)
 		if !ok {
 			body = ""
 			return map[string]interface{}{"msg": body}
 		}
-		if len(body) > stackLength {
+
+		if utf8.RuneCountInString(body) > stackLength {
 			body = SubStrDecodeRuneInString(body, stackLength)
 		}
 		body = bVal
@@ -266,10 +278,8 @@ func writeFile(el *logrus.Logger, level LogLevel, body map[string]interface{}, r
 		}
 	}
 
-	if len(rc) > 0 && len(rc[0].file) > 0 {
-		_, file := filepath.Split(rc[0].file)
-		caller := StringSpliceTag(":", file, strconv.Itoa(rc[0].line))
-		body["caller"] = caller
+	if len(rc) > 0 {
+		body["caller"] = rc[0].join
 		entry := el.WithFields(body)
 		switch level {
 		case ErrorLevel:
@@ -283,12 +293,12 @@ func writeFile(el *logrus.Logger, level LogLevel, body map[string]interface{}, r
 		case DebugLevel:
 			entry.Debug(msg)
 		case TranceInfoLevel:
-			delete(body, caller)
+			delete(body, rc[0].join)
 			rest, err := json.Marshal(&body)
 			if err != nil {
 				return
 			}
-			el.WithFields(logrus.Fields{"caller": caller, "trace": string(rest)}).Info()
+			el.WithFields(logrus.Fields{"caller": rc[0].join, "trace": string(rest)}).Info()
 		}
 		return
 	}
@@ -317,14 +327,12 @@ func writeJsonToFile(el *logrus.Logger, level LogLevel, body map[string]interfac
 		}
 	}
 
-	if len(rc) > 0 && len(rc[0].file) > 0 {
-		_, file := filepath.Split(rc[0].file)
-		caller := StringSpliceTag(":", file, strconv.Itoa(rc[0].line))
+	if len(rc) > 0 {
 		jsonText, err := json.Marshal(&body)
 		if err != nil {
 			return
 		}
-		entry := el.WithFields(logrus.Fields{"json": string(jsonText), "caller": caller})
+		entry := el.WithFields(logrus.Fields{"json": string(jsonText), "caller": rc[0].join})
 		switch level {
 		case ErrorLevel:
 			entry.Error(msg)
@@ -337,12 +345,12 @@ func writeJsonToFile(el *logrus.Logger, level LogLevel, body map[string]interfac
 		case DebugLevel:
 			entry.Info(msg)
 		case TranceInfoLevel:
-			delete(body, caller)
+			delete(body, rc[0].join)
 			rest, err := json.Marshal(&body)
 			if err != nil {
 				return
 			}
-			el.WithFields(logrus.Fields{"caller": caller, "trace": string(rest)}).Info()
+			el.WithFields(logrus.Fields{"caller": rc[0].join, "trace": string(rest)}).Info()
 		}
 		return
 	}
@@ -367,8 +375,41 @@ func writeJsonToFile(el *logrus.Logger, level LogLevel, body map[string]interfac
 }
 
 func output(level LogLevel, v ...interface{}) {
+	var caller reportCaller
+	if isReportCaller {
+		if _, file, line, ok := runtime.Caller(2); ok {
+			_, fileName := filepath.Split(file)
+			caller.join = StringSpliceTag(":", fileName, strconv.Itoa(line))
+		}
+	}
+
 	if outConsole {
-		fmt.Println(v...)
+		var levelInitial string
+		switch level {
+		case ErrorLevel:
+			levelInitial = "E"
+			color.Set(color.FgRed)
+		case WarnLevel:
+			levelInitial = "W"
+			color.Set(color.FgHiYellow)
+		case FatalLevel:
+			levelInitial = "F"
+			color.Set(color.FgHiRed)
+		case InfoLevel:
+			levelInitial = "I"
+			color.Set(color.BgHiMagenta)
+		case DebugLevel:
+			levelInitial = "D"
+			color.Set(color.BgGreen)
+		}
+		sprintf := fmt.Sprintf("[%s]", levelInitial)
+		if isReportCaller {
+			sprintf += fmt.Sprintf("[%s]", caller.join)
+		}
+		sprintf += "\t"
+		sprintf += fmt.Sprint(v...)
+		fmt.Println(sprintf)
+		color.Unset()
 	}
 
 	defer func() {
@@ -383,19 +424,11 @@ func output(level LogLevel, v ...interface{}) {
 		customizeLog <- body
 	}
 
-	var caller reportCaller
-	if isReportCaller {
-		if _, file, line, ok := runtime.Caller(2); ok {
-			caller.file = file
-			caller.line = line
-		}
-	}
-
 	// Remote log
 	if remoteRabbitMQLog != nil {
 		mq, err := getRabbitMQInstance()
 		if err != nil {
-			if len(caller.file) > 0 {
+			if caller.join != "" {
 				writeLocalLog(ErrorLevel, H{"msg": "Failed to create rabbitmq!", "err": err.Error()}, caller)
 			} else {
 				writeLocalLog(ErrorLevel, H{"msg": "Failed to create rabbitmq!", "err": err.Error()})
@@ -403,10 +436,8 @@ func output(level LogLevel, v ...interface{}) {
 			return
 		}
 
-		if caller.file != "" {
-			_, file := filepath.Split(caller.file)
-			cs := StringSpliceTag(":", file, strconv.Itoa(caller.line))
-			body["caller"] = cs
+		if caller.join != "" {
+			body["caller"] = caller.join
 		}
 
 		if remoteTemplateHandler != nil {
@@ -415,7 +446,7 @@ func output(level LogLevel, v ...interface{}) {
 
 		rest, err := json.Marshal(&body)
 		if err != nil {
-			if len(caller.file) > 0 {
+			if caller.join != "" {
 				writeLocalLog(ErrorLevel, H{"msg": "JSON serialization failed!", "err": err.Error()}, caller)
 			} else {
 				writeLocalLog(ErrorLevel, H{"msg": "JSON serialization failed!", "err": err.Error()})
@@ -440,7 +471,7 @@ func output(level LogLevel, v ...interface{}) {
 			if remoteTemplateHandler != nil {
 				remoteTemplateHandler.Error(err)
 			}
-			if len(caller.file) > 0 {
+			if caller.join != "" {
 				writeLocalLog(ErrorLevel, H{"msg": "Remote log sending failed!", "err": err.Error()}, caller)
 			} else {
 				writeLocalLog(ErrorLevel, H{"msg": "Remote log sending failed!", "err": err.Error()})
@@ -449,7 +480,7 @@ func output(level LogLevel, v ...interface{}) {
 	}
 
 	// Local log
-	if caller.file != "" {
+	if caller.join != "" {
 		writeLocalLog(level, body, caller)
 	} else {
 		writeLocalLog(level, body)
@@ -457,8 +488,41 @@ func output(level LogLevel, v ...interface{}) {
 }
 
 func outputJSON(level LogLevel, s map[string]interface{}) {
+	var caller reportCaller
+	if isReportCaller {
+		if _, file, line, ok := runtime.Caller(2); ok {
+			_, fileName := filepath.Split(file)
+			caller.join = StringSpliceTag(":", fileName, strconv.Itoa(line))
+		}
+	}
+
 	if outConsole {
-		fmt.Println(s)
+		var levelInitial string
+		switch level {
+		case ErrorLevel:
+			levelInitial = "E"
+			color.Set(color.FgRed)
+		case WarnLevel:
+			levelInitial = "W"
+			color.Set(color.FgHiYellow)
+		case FatalLevel:
+			levelInitial = "F"
+			color.Set(color.FgHiRed)
+		case InfoLevel:
+			levelInitial = "I"
+			color.Set(color.BgHiMagenta)
+		case DebugLevel:
+			levelInitial = "D"
+			color.Set(color.BgGreen)
+		}
+		sprintf := fmt.Sprintf("[%s]", levelInitial)
+		if isReportCaller {
+			sprintf += fmt.Sprintf("[%s]", caller.join)
+		}
+		sprintf += "\t"
+		sprintf += fmt.Sprint(s)
+		fmt.Println(sprintf)
+		color.Unset()
 	}
 
 	defer func() {
@@ -471,14 +535,6 @@ func outputJSON(level LogLevel, s map[string]interface{}) {
 		customizeLog <- s
 	}
 
-	var caller reportCaller
-	if isReportCaller {
-		if _, file, line, ok := runtime.Caller(2); ok {
-			caller.file = file
-			caller.line = line
-		}
-	}
-
 	//remote log
 	if remoteRabbitMQLog != nil {
 		mq, err := getRabbitMQInstance()
@@ -487,10 +543,8 @@ func outputJSON(level LogLevel, s map[string]interface{}) {
 			return
 		}
 
-		if caller.file != "" {
-			_, file := filepath.Split(caller.file)
-			cs := StringSpliceTag(":", file, strconv.Itoa(caller.line))
-			s["caller"] = cs
+		if caller.join != "" {
+			s["caller"] = caller.join
 		}
 
 		if remoteTemplateHandler != nil {
@@ -499,7 +553,7 @@ func outputJSON(level LogLevel, s map[string]interface{}) {
 
 		rest, err := json.Marshal(&s)
 		if err != nil {
-			if len(caller.file) > 0 {
+			if caller.join != "" {
 				writeLocalLog(ErrorLevel, H{"msg": "JSON serialization failed!", "err": err.Error()}, caller)
 			} else {
 				writeLocalLog(ErrorLevel, H{"msg": "JSON serialization failed!", "err": err.Error()})
@@ -529,7 +583,7 @@ func outputJSON(level LogLevel, s map[string]interface{}) {
 		}
 	}
 
-	if caller.file != "" {
+	if caller.join != "" {
 		writeLocalLogToJson(level, s, caller)
 	} else {
 		writeLocalLogToJson(level, s)
@@ -574,6 +628,10 @@ func Fatal(v ...interface{}) {
 
 func FatalJSON(h map[string]interface{}) {
 	output(FatalLevel, h)
+}
+
+func SetConsoleLogNoColor() {
+	color.NoColor = true
 }
 
 func SetOutputToConsole(v bool) {
@@ -761,8 +819,8 @@ func (u *useOtherConfig) output(level LogLevel, v ...interface{}) {
 			s = 2
 		}
 		if _, file, line, ok := runtime.Caller(s); ok {
-			caller.file = file
-			caller.line = line
+			_, fileName := filepath.Split(file)
+			caller.join = StringSpliceTag(":", fileName, strconv.Itoa(line))
 		}
 	}
 
@@ -773,7 +831,7 @@ func (u *useOtherConfig) output(level LogLevel, v ...interface{}) {
 		}
 	} else {
 		body = getBody(v...)
-		if len(caller.file) > 0 {
+		if caller.join != "" {
 			u.writeLocalLog(level, body, caller)
 		} else {
 			u.writeLocalLog(level, body)
@@ -789,7 +847,7 @@ func (u *useOtherConfig) output(level LogLevel, v ...interface{}) {
 		mq, err := getRabbitMQInstance()
 		if err != nil {
 			by := H{"msg": "Failed to create rabbitmq!", "err": err.Error()}
-			if len(caller.file) > 0 {
+			if len(caller.join) > 0 {
 				u.writeLocalLog(ErrorLevel, by, caller)
 			} else {
 				u.writeLocalLog(ErrorLevel, by)
@@ -797,9 +855,8 @@ func (u *useOtherConfig) output(level LogLevel, v ...interface{}) {
 			return
 		}
 
-		if caller.file != "" {
-			_, file := filepath.Split(caller.file)
-			body["caller"] = StringSpliceTag(":", file, strconv.Itoa(caller.line))
+		if caller.join != "" {
+			body["caller"] = caller.join
 		}
 
 		if remoteTemplateHandler != nil {
@@ -812,7 +869,7 @@ func (u *useOtherConfig) output(level LogLevel, v ...interface{}) {
 				text, err := json.Marshal(&H{"trace": v[0]})
 				if err != nil {
 					by := H{"msg": "[remote log]:json Marshal err", "err": err.Error()}
-					if len(caller.file) > 0 {
+					if caller.join != "" {
 						u.writeLocalLog(ErrorLevel, by, caller)
 					} else {
 						u.writeLocalLog(ErrorLevel, by)
@@ -825,7 +882,7 @@ func (u *useOtherConfig) output(level LogLevel, v ...interface{}) {
 			str, err := json.Marshal(&body)
 			if err != nil {
 				by := H{"msg": "Failed to create rabbitmq!", "err": err.Error()}
-				if len(caller.file) > 0 {
+				if caller.join != "" {
 					u.writeLocalLog(ErrorLevel, by, caller)
 				} else {
 					u.writeLocalLog(ErrorLevel, by)
@@ -852,7 +909,7 @@ func (u *useOtherConfig) output(level LogLevel, v ...interface{}) {
 				remoteTemplateHandler.Error(err)
 			}
 			by := H{"msg": "Remote log sending failed!", "err": err.Error()}
-			if len(caller.file) > 0 {
+			if caller.join != "" {
 				u.writeLocalLog(ErrorLevel, by, caller)
 			} else {
 				u.writeLocalLog(ErrorLevel, by)
@@ -881,10 +938,8 @@ func (u *useOtherConfig) writeLocalLog(level LogLevel, body map[string]interface
 	if u.log == nil {
 		return
 	}
-	if len(rc) > 0 && len(rc[0].file) > 0 {
-		_, file := filepath.Split(rc[0].file)
-		caller := StringSpliceTag(":", file, strconv.Itoa(rc[0].line))
-		body["caller"] = caller
+	if len(rc) > 0 {
+		body["caller"] = rc[0].join
 		entry := u.log.WithFields(body)
 		switch level {
 		case ErrorLevel:
@@ -946,9 +1001,13 @@ func SetLocalLogConfig(entity ...LogEntity) {
 			Compress:   k.Compress,
 		})
 		if k.Formatter == TextFormatter {
-			l.SetFormatter(&logrus.TextFormatter{})
+			l.SetFormatter(&logrus.TextFormatter{
+				TimestampFormat: "2006-01-02 15:04:05",
+			})
 		} else {
-			l.SetFormatter(&logrus.JSONFormatter{})
+			l.SetFormatter(&logrus.JSONFormatter{
+				TimestampFormat: "2006-01-02 15:04:05",
+			})
 		}
 		l.SetLevel(logrus.Level(globalLogLevel))
 		logs[k.FileName] = l
@@ -990,8 +1049,8 @@ func RemoteLog(t LogLevel, v ...interface{}) {
 	var caller reportCaller
 	if isReportCaller {
 		if _, file, line, ok := runtime.Caller(2); ok {
-			caller.file = file
-			caller.line = line
+			_, fileName := filepath.Split(file)
+			caller.join = StringSpliceTag(":", fileName, strconv.Itoa(line))
 		}
 	}
 
@@ -999,7 +1058,7 @@ func RemoteLog(t LogLevel, v ...interface{}) {
 
 	mq, err := getRabbitMQInstance()
 	if err != nil {
-		if len(caller.file) > 0 {
+		if caller.join != "" {
 			writeLocalLog(t, H{"msg": "connect rabbitMQ error", "err": err.Error()}, caller)
 		} else {
 			writeLocalLog(t, H{"msg": "connect rabbitMQ error", "err": err.Error()})
@@ -1007,10 +1066,8 @@ func RemoteLog(t LogLevel, v ...interface{}) {
 		return
 	}
 
-	if caller.file != "" {
-		_, file := filepath.Split(caller.file)
-		cs := StringSpliceTag(":", file, strconv.Itoa(caller.line))
-		body["caller"] = cs
+	if caller.join != "" {
+		body["caller"] = caller.join
 	}
 
 	if remoteTemplateHandler != nil {
@@ -1019,7 +1076,7 @@ func RemoteLog(t LogLevel, v ...interface{}) {
 
 	rest, err := json.Marshal(&body)
 	if err != nil {
-		if len(caller.file) > 0 {
+		if caller.join != "" {
 			writeLocalLog(ErrorLevel, H{"msg": "JSON serialization failed!", "err": err.Error()}, caller)
 		} else {
 			writeLocalLog(ErrorLevel, H{"msg": "JSON serialization failed!", "err": err.Error()})
@@ -1043,7 +1100,7 @@ func RemoteLog(t LogLevel, v ...interface{}) {
 		if remoteTemplateHandler != nil {
 			remoteTemplateHandler.Error(err)
 		}
-		if len(caller.file) > 0 {
+		if caller.join != "" {
 			writeLocalLog(t, H{"msg": "Remote log sending failed!", "err": err.Error()}, caller)
 		} else {
 			writeLocalLog(t, H{"msg": "Remote log sending failed!", "err": err.Error()})

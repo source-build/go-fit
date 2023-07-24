@@ -18,7 +18,7 @@ const (
 func GetProjectEnv(name string) EnvType {
 	env := os.Getenv(name)
 	if env == "" {
-		log.Println("Unable to find an environment variable named '" + env + "', which represents the development environment of the project. Optional values: development or production. Will use 'development' as the default value.")
+		log.Println("Unable to find an environment variable named '" + name + "', which represents the development environment of the project. Optional values: development or production. Will use 'development' as the default value.")
 		env = "development"
 	} else if env != "development" && env != "production" {
 		panic("Environment variable " + env + " can only select the following optional values:development or production")

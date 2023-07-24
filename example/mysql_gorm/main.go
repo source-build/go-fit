@@ -8,14 +8,29 @@ import (
 )
 
 func main() {
+	fit.SetLogLevel(fit.InfoLevel)
+	fit.SetLocalLogConfig(fit.LogEntity{
+		LogPath:  "logs",
+		FileName: "diagnosis",
+	})
+	fit.SetOutputToConsole(true)
+
+	instance, ok := fit.GetLogInstance("diagnosis")
+	if !ok {
+		log.Fatalln("not find")
+	}
+
 	//使用默认的方式连接
 	//参数2 记录操作,需要与trace中间件搭配使用
 	err := fit.NewMysqlDefConnect(fit.DefaultConfigMysql{
-		User: "root",
-		Pass: "123456",
-		IP:   "127.0.0.1",
-		Port: "3316",
-		DB:   "user",
+		User:      "root",
+		Pass:      "12345678",
+		IP:        "127.0.0.1",
+		Port:      "3306",
+		DB:        "",
+		FitLogger: instance, //输出到 diagnosis.log 中,Debug 级别中有效
+		//Logger: logger.New(), // 自定义日志
+		//LogMode: logger.Error, // 自定义日志级别 默认 Error,仅 Logger 存在时有效;
 	}, false)
 	if err != nil {
 		log.Fatalln(err)
