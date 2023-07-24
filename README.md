@@ -18,6 +18,7 @@ go get github.com/source-build/go-fit
 package main
 
 import (
+	"errors"
 	"fmt"
 	"github.com/source-build/go-fit"
 	"log"
@@ -38,6 +39,21 @@ func (r remoteLogHook) Error(err error) {
 }
 
 func main() {
+	fit.SetLogLevel(fit.DebugLevel)
+	fit.SetLocalLogConfig(fit.LogEntity{
+		LogPath:  "logs",      //日志文件存放的路径，默认 logs;
+		FileName: "diagnosis", //日志文件名称,默认名称:"general.log"
+	})
+	fit.SetOutputToConsole(true)
+
+	fit.Error(errors.New("这是此哦污嘻嘻"))
+	fit.Warning("哈哈哈")
+	fit.Info("哈哈哈")
+	fit.Debug("哈哈哈")
+	fit.ErrorJSON(fit.H{"title": "666"})
+}
+
+func main11() {
 	//设置日志级别,需要在SetLocalLogConfig之前设置
 	//注意：级别顺序为, debug < info < warning < error
 	//如果级别为debug,那么会输出所有级别(开发环境)
@@ -48,30 +64,32 @@ func main() {
 	/* 开启本地日志 */
 	//🙅 注意,多实例日志会增加磁盘IO开销,谨慎使用
 	fit.SetLocalLogConfig(fit.LogEntity{
-		LogPath:  "logs",      //日志文件存放的路径，默认为根目录下的logs
-		FileName: "diagnosis", //日志文件名称
+		LogPath:  "logs",      //日志文件存放的路径，默认 logs;
+		FileName: "diagnosis", //日志文件名称,默认名称:"general.log"
 
-		//关闭记录文件名|位置,默认开启
+		//关闭记录文件名-位置,默认开启,输出到 caller 字段;
 		//ReportCaller: true,
 
-		//默认日志，当直接调用Error、Info时会使用该日志实例
-		//当fit.LogEntity只有一项时,默认日志就是第一项
+		//默认日志,当直接调用fit.Error、fit.Info...时会使用的日志实例;
+		//当 fit.LogEntity 只有一项时,默认日志就是第一项,无需传入 IsDefaultLog;
 		//IsDefaultLog: true,
 	},
-		//多实例
-		//fit.LogEntity{
-		//	LogPath:  "logs",
-		//	FileName: "track",
-		//}, fit.LogEntity{
-		//	LogPath:  "logs",
-		//	FileName: "mysql_gorm",
-		//}
+	//多实例
+	//fit.LogEntity{
+	//	LogPath:  "logs",
+	//	FileName: "track",
+	//}, fit.LogEntity{
+	//	LogPath:  "logs",
+	//	FileName: "mysql_gorm",
+	//}
 	)
 
 	/* 设置堆栈错误信息长度(默认300) */
 	fit.SetLogStackLength(100)
-	/* 开启控制台输出,DEBUG级别有效 */
+	/* 开启控制台输出,仅 Debug 级别有效 */
 	fit.SetOutputToConsole(true)
+	/* 禁用控制台彩色字体输出 */
+	fit.SetConsoleLogNoColor()
 
 	/* ============== 开启远程日志，使用rabbitMQ的routing模式，消息格式:json(可通过hook函数来修改) ============== */
 	/******** 参数 Simple=true 的情况下 : ******/
@@ -159,8 +177,9 @@ func main() {
 	instance.Error()
 
 	/*快捷使用*/
-	//注意,如果参数只有一个,那么会记录被到文件中msg字段
-	//参数数量要嘛就只传一个,要嘛必须是偶数
+	//参数可以只传一个,或者必须是偶数
+	//可以直接传入一个err,会被记录到"err"字段中
+	fit.Error(errors.New("error info"))
 	fit.Debug("content")   //Debug
 	fit.Info("content")    //消息
 	fit.Warning("content") //警告
@@ -1826,14 +1845,29 @@ import (
 )
 
 func main() {
+	fit.SetLogLevel(fit.InfoLevel)
+	fit.SetLocalLogConfig(fit.LogEntity{
+		LogPath:  "logs",
+		FileName: "diagnosis",
+	})
+	fit.SetOutputToConsole(true)
+
+	instance, ok := fit.GetLogInstance("diagnosis")
+	if !ok {
+		log.Fatalln("not find")
+	}
+
 	//使用默认的方式连接
 	//参数2 记录操作,需要与trace中间件搭配使用
 	err := fit.NewMysqlDefConnect(fit.DefaultConfigMysql{
-		User: "root",
-		Pass: "123456",
-		IP:   "127.0.0.1",
-		Port: "3316",
-		DB:   "user",
+		User:      "root",
+		Pass:      "12345678",
+		IP:        "127.0.0.1",
+		Port:      "3306",
+		DB:        "",
+		FitLogger: instance, //输出到 diagnosis.log 中,Debug 级别中有效
+		//Logger: logger.New(), // 自定义日志
+		//LogMode: logger.Error, // 自定义日志级别 默认 Error,仅 Logger 存在时有效;
 	}, false)
 	if err != nil {
 		log.Fatalln(err)
