@@ -29,7 +29,7 @@ func main() {
 	})
 	fit.SetOutputToConsole(true)
 
-	fit.Error(errors.New("这是此哦污嘻嘻"))
+	fit.Error(errors.New("这"))
 	fit.Warning("哈哈哈")
 	fit.Info("哈哈哈")
 	fit.Debug("哈哈哈")

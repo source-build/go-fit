@@ -38,7 +38,7 @@ func main() {
 
 	//自定义配置的方式连接
 	addr := "root:123@tcp(127.0.0.1:3369)/foo?charset=utf8mb4&parseTime=True&loc=Local"
-	pool, err := fit.NewMysqlConnect(addr, &gorm.Config{}, true, false)
+	pool, err := fit.NewMysqlConnect(addr, &gorm.Config{}, false)
 	if err != nil {
 		log.Fatalln(err)
 	}

@@ -14,17 +14,34 @@ import (
 var mysqlClient *gorm.DB
 
 type DefaultConfigMysql struct {
-	User      string
-	Pass      string
-	IP        string
-	Port      string
-	DB        string
-	FitLogger *logrus.Logger
-	Logger    logger.Interface
-	LogMode   logger.LogLevel
+	User            string
+	Pass            string
+	IP              string
+	Port            string
+	DB              string
+	FitLogger       *logrus.Logger
+	Logger          logger.Interface
+	LogMode         logger.LogLevel
+	MaxIdleConns    int
+	MaxOpenConns    int
+	ConnMaxLifetime time.Duration
 }
 
+var sqlDB *sql.DB
+
 func NewMysqlDefConnect(config DefaultConfigMysql, useTrace bool) error {
+	if config.MaxIdleConns <= 0 {
+		config.MaxIdleConns = 25
+	}
+
+	if config.MaxOpenConns <= 0 {
+		config.MaxOpenConns = 200
+	}
+
+	if config.ConnMaxLifetime == 0 {
+		config.ConnMaxLifetime = time.Hour
+	}
+
 	dsn := fmt.Sprintf("%v:%v@tcp(%v:%v)/%v?charset=utf8mb4&parseTime=True&loc=Local", config.User, config.Pass, config.IP, config.Port, config.DB)
 	cf := gorm.Config{}
 	if config.LogMode == 0 {
@@ -57,8 +74,7 @@ func NewMysqlDefConnect(config DefaultConfigMysql, useTrace bool) error {
 	}
 
 	if useTrace {
-		err = client.Use(new(TracePlugin))
-		if err != nil {
+		if err = client.Use(new(TracePlugin)); err != nil {
 			return err
 		}
 	}
@@ -66,18 +82,29 @@ func NewMysqlDefConnect(config DefaultConfigMysql, useTrace bool) error {
 	mysqlClient = client
 
 	// connection pool,use default config
-	sqlDb, err := client.DB()
-	sqlDb.SetMaxIdleConns(10)
-	sqlDb.SetMaxOpenConns(200)
-	sqlDb.SetConnMaxLifetime(time.Hour)
+	sqlDB, err = client.DB()
+	sqlDB.SetMaxIdleConns(config.MaxIdleConns)
+	sqlDB.SetMaxOpenConns(config.MaxOpenConns)
+	sqlDB.SetConnMaxLifetime(config.ConnMaxLifetime)
+	if err != nil {
+		return err
+	}
+
 	return nil
+}
+
+func CloseSqlDB() {
+	if sqlDB != nil {
+		if err := sqlDB.Close(); err != nil {
+			Error(err)
+		}
+	}
 }
 
 // NewMysqlConnect  init new mysql_gorm client
 // param: addr mysql_gorm address, format: root:123@tcp(127.0.0.1:3369)/foo?charset=utf8mb4&parseTime=True&loc=Local
 // param: config mysql_gorm config
-// param: isUsePool use connection pool
-func NewMysqlConnect(addr string, config *gorm.Config, usePool, useTrace bool) (*sql.DB, error) {
+func NewMysqlConnect(addr string, config *gorm.Config, useTrace bool) (*sql.DB, error) {
 	client, err := gorm.Open(mysql.Open(addr), config)
 	if err != nil {
 		return nil, err
@@ -91,17 +118,12 @@ func NewMysqlConnect(addr string, config *gorm.Config, usePool, useTrace bool) (
 	}
 
 	mysqlClient = client
-
-	// connection pool
-	var pool *sql.DB
-	if usePool {
-		pool, err = client.DB()
-		if err != nil {
-			return pool, err
-		}
+	sqlDB, err = client.DB()
+	if err != nil {
+		return nil, err
 	}
 
-	return pool, nil
+	return sqlDB, nil
 }
 
 func MainMysql() *gorm.DB {
