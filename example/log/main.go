@@ -28,7 +28,6 @@ func main() {
 		FileName: "diagnosis", //日志文件名称,默认名称:"general.log"
 	})
 	fit.SetOutputToConsole(true)
-
 	fit.Error(errors.New("这"))
 	fit.Warning("哈哈哈")
 	fit.Info("哈哈哈")

@@ -9,15 +9,6 @@ import (
 	"time"
 )
 
-type RequestMethods string
-
-const (
-	GET    RequestMethods = "GET"
-	POST   RequestMethods = "POST"
-	PUT    RequestMethods = "PUT"
-	DELETE RequestMethods = "DELETE"
-)
-
 type HttpUtil struct {
 	response *http.Response
 	Err      error

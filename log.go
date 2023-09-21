@@ -402,11 +402,10 @@ func output(level LogLevel, v ...interface{}) {
 			levelInitial = "D"
 			color.Set(color.BgGreen)
 		}
-		sprintf := fmt.Sprintf("[%s]", levelInitial)
+		sprintf := fmt.Sprintf("[%s] ", levelInitial)
 		if isReportCaller {
-			sprintf += fmt.Sprintf("[%s]", caller.join)
+			sprintf += fmt.Sprintf("[%s] ", caller.join)
 		}
-		sprintf += "\t"
 		sprintf += fmt.Sprint(v...)
 		fmt.Println(sprintf)
 		color.Unset()
@@ -515,11 +514,10 @@ func outputJSON(level LogLevel, s map[string]interface{}) {
 			levelInitial = "D"
 			color.Set(color.BgGreen)
 		}
-		sprintf := fmt.Sprintf("[%s]", levelInitial)
+		sprintf := fmt.Sprintf("[%s] ", levelInitial)
 		if isReportCaller {
-			sprintf += fmt.Sprintf("[%s]", caller.join)
+			sprintf += fmt.Sprintf("[%s] ", caller.join)
 		}
-		sprintf += "\t"
 		sprintf += fmt.Sprint(s)
 		fmt.Println(sprintf)
 		color.Unset()

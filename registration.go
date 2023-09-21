@@ -160,12 +160,10 @@ func (e *ServiceRegister) watcher() {
 			if event.Type == clientv3.EventTypeDelete {
 				if !e.isCallClose {
 					e.restartChan <- struct{}{}
-					if _, err := e.Client.Revoke(e.Ctx, e.leaseID); err != nil {
-						Error("msg", "ETCD Revoke failed!", "err", err)
-					}
+					_, _ = e.Client.Revoke(e.Ctx, e.leaseID)
 					if err := e.putKeyWithLease(e.Lease, string(event.Kv.Value)); err != nil {
 						Error("msg", "service restart failed!", "err", err)
-						e.Client.Delete(e.Ctx, e.Key)
+						_, _ = e.Client.Delete(e.Ctx, e.Key)
 						e.cancel()
 						e.exit()
 						if e.OnBack != nil {
@@ -185,7 +183,7 @@ func (e *ServiceRegister) watcher() {
 
 			if rcv.Status == ServiceStatusKill {
 				Info("Received kill instruction")
-				e.Client.Delete(e.Ctx, e.Key)
+				_, _ = e.Client.Delete(e.Ctx, e.Key)
 				e.cancel()
 				return
 			}
@@ -197,12 +195,10 @@ func (e *ServiceRegister) watcher() {
 			// update
 			if event.Type == clientv3.EventTypePut {
 				e.restartChan <- struct{}{}
-				if _, err := e.Client.Revoke(e.Ctx, e.leaseID); err != nil {
-					Error("msg", "ETCD Revoke failed!", "err", err)
-				}
+				_, _ = e.Client.Revoke(e.Ctx, e.leaseID)
 				if err := e.putKeyWithLease(e.Lease, string(event.Kv.Value)); err != nil {
 					Error("msg", "service restart failed!", "err", err)
-					e.Client.Delete(e.Ctx, e.Key)
+					_, _ = e.Client.Delete(e.Ctx, e.Key)
 					e.cancel()
 					e.exit()
 					if e.OnBack != nil {
