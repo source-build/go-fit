@@ -1,10 +1,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/source-build/go-fit"
 	"github.com/source-build/go-fit/flog"
+	"go.uber.org/zap"
 	"log"
 	"net/http"
 	"os"
@@ -28,9 +30,14 @@ func main() {
 		Compress:   false,
 		Tees:       nil,
 		ZapOptions: nil,
+		CallerSkip: 0,
 	}
 	flog.Init(opt)
 	defer flog.Sync()
+
+	flog.Error("", zap.Error(errors.New("错误信息")))
+
+	return
 
 	g := gin.New()
 

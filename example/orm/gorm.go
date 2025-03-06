@@ -18,9 +18,9 @@ type User struct {
 func main() {
 	// 初始化一个日志
 	opt := flog.Options{
-		LogLevel:          flog.InfoLevel,
+		LogLevel:          flog.ErrorLevel,
 		EncoderConfigType: flog.ProductionEncoderConfig,
-		Console:           true,
+		Console:           false,
 		// 默认文件输出，为空表示不输出到文件
 		Filename: "logs/mysql.log",
 	}
@@ -61,7 +61,7 @@ func main() {
 		Username: "root",
 		Password: "12345678",
 		Protocol: "tcp",
-		Address:  "127.0.0.1:3306",
+		Address:  "110.42.184.124:3326",
 		DbName:   "testa",
 		// 自定义DSN参数，默认使用 charset=utf8&parseTime=True&loc=Local
 		Params: nil,
@@ -94,5 +94,5 @@ func main() {
 	fit.DB.Take(&user, 10)
 
 	marshal, _ := json.Marshal(&user)
-	fmt.Println(string(marshal))
+	fmt.Println("结果", string(marshal))
 }

@@ -55,7 +55,7 @@ func direct() {
 
 func gRPCDirect() {
 	clientV3, err := clientv3.New(clientv3.Config{
-		Endpoints: []string{"127.0.0.1:2379"},
+		Endpoints: []string{"110.42.184.124:2479"},
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -66,7 +66,7 @@ func gRPCDirect() {
 		// etcd
 		EtcdClient: clientV3,
 		// 命名空间
-		Namespace: "ht",
+		Namespace: "ha",
 
 		// TLS单向认证，只有客户端验证服务器的身份
 		//TLSType: frpc.TLSTypeOneWay,
@@ -80,7 +80,7 @@ func gRPCDirect() {
 		CertFile:           "keys/client.crt",
 		KeyFile:            "keys/client.key",
 		CAFile:             "keys/ca.crt",
-		ServerNameOverride: "sourcebuild.cn",
+		ServerNameOverride: "ht.sourcebuild.cn",
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -109,7 +109,7 @@ func gRPCDirect() {
 	//opts = append(opts, frpc.WithBlock())
 
 	// 禁用TLS身份验证，如果在frpc.Init使用了TLS(单/双向认证),但是又希望在本次连接中不使用身份验证，可使用该方法来禁用它。
-	opts = append(opts, frpc.DisableTLS())
+	//opts = append(opts, frpc.DisableTLS())
 
 	// 参数target: key(即服务注册时填写的key)
 	client, err := frpc.NewClient("user", opts...)
@@ -117,19 +117,13 @@ func gRPCDirect() {
 		log.Println(err)
 		return
 	}
-
-	//defer client.Close()
+	defer client.Close()
 
 	// 判断错误是否是“没有可用的服务”，该错误表示没有找到任何服务。
 	//frpc.IsNotFoundServiceErr(err)
 
-	c := pb.NewPhoneLoginSmsVerCodeClient(client)
-
-	resp, err := c.Check(context.Background(), &pb.CheckRequest{
-		PhoneCode: "123456",
-		Code:      0,
-	})
-	fmt.Println(resp, err)
+	id, err := pb.NewUserInfoClient(client).GetUserInfoById(context.Background(), &pb.UserInfoIdRequest{Id: 1})
+	fmt.Println(id, err)
 }
 
 func main() {

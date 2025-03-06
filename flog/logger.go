@@ -42,6 +42,8 @@ type Options struct {
 	// Allows users to configure the concrete encoders supplied by
 	EncoderConfig zapcore.EncoderConfig
 
+	CallerSkip int
+
 	// Whether to output to the console
 	Console bool
 
@@ -131,6 +133,12 @@ func New(opt Options) *Logger {
 
 	opts := opt.ZapOptions
 	opts = append(opts, zap.AddCaller())
+
+	if opt.CallerSkip > 0 {
+		opts = append(opts, zap.AddCallerSkip(0))
+	} else {
+		opts = append(opts, zap.AddCallerSkip(2))
+	}
 
 	return &Logger{
 		l:  zap.New(zapcore.NewTee(cores...), opts...),
