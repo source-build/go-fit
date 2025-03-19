@@ -129,5 +129,5 @@ func gRPCDirect() {
 func main() {
 	//direct()
 
-	gRPCDirect()
+	//gRPCDirect()
 }

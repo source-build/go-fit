@@ -14,7 +14,7 @@ type ResponseOK struct {
 
 type ResponseErr struct {
 	// 0:client err 1:internal err
-	Type   int    `json:"-,omitempty"`
+	Type   int    `json:"-"`
 	Code   int    `json:"code"`
 	ErrMsg string `json:"err_msg"`
 	Result any    `json:"result"`
