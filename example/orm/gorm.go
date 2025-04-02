@@ -59,7 +59,7 @@ func main() {
 		Username: "root",
 		Password: "12345678",
 		Protocol: "tcp",
-		Address:  "127.0.0.1:3326",
+		Address:  "127.0.0.1:3306",
 		DbName:   "test",
 		// 自定义DSN参数，默认使用 charset=utf8&parseTime=True&loc=Local
 		Params: nil,
@@ -81,6 +81,4 @@ func main() {
 	//fit.InjectMySQLClient()
 	//fit.DB
 	//fit.DB.AutoMigrate(&User{})
-
-	//fit.DB.Create(&User{})
 }

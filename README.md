@@ -4,6 +4,11 @@
 
 封装了开发中常用到的日志库、服务注册与发现、统一http响应体、快捷访问MySQL与Redis、请求参数校验、字符串操作、网络、随机数、加密、配置文件、时间、金额/小数操作等。
 
+> 安装
+> ```shell
+> go get -u github.com/source-build/go-fit
+> ```
+
 ## 日志库
 
 > 基于 [zap库](https://markdown.com.cn) 封装
@@ -846,7 +851,7 @@ fit.GlobalSetRabbitMQUrl("amqp://guest:guest@127.0.0.1:5672")
 //单独设置rabbitMQ地址
 mq, err := fit.NewRabbitMQ("amqp://guest:guest@127.0.0.1:5672")
 if err != nil {
-  log.Fatal(err)
+log.Fatal(err)
 }
 //释放资源
 defer mq.Close()

@@ -45,6 +45,10 @@ func (t *Time) UnmarshalJSON(b []byte) error {
 
 func (t *Time) Value() (driver.Value, error) {
 	var zeroTime time.Time
+	if t == nil {
+		return nil, nil
+	}
+
 	tlt := time.Time(*t)
 	if tlt.UnixNano() == zeroTime.UnixNano() {
 		return nil, nil
