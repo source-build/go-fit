@@ -2,6 +2,8 @@ package fit
 
 import (
 	"context"
+	"database/sql/driver"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/source-build/go-fit/flog"
@@ -19,6 +21,51 @@ const (
 	traceWarnStr = "%s %s [%.3fms] [rows:%v] %s"
 	traceErrStr  = "%s %s [%.3fms] [rows:%v] %s"
 )
+
+// Time Applicable to gorm time types in the format of 'yyyy-mm-dd_hh-mm-ss'
+type Time time.Time
+
+func (t *Time) PtrTime() *Time {
+	return t
+}
+
+func (t *Time) MarshalJSON() ([]byte, error) {
+	tlt := time.Time(*t)
+	return json.Marshal(tlt.Format("2006-01-02 15:04:05"))
+}
+
+func (t *Time) UnmarshalJSON(b []byte) error {
+	tlt, err := time.Parse(`"2006-01-02 15:04:05"`, string(b))
+	if err != nil {
+		return err
+	}
+	*t = Time(tlt)
+	return nil
+}
+
+func (t *Time) Value() (driver.Value, error) {
+	var zeroTime time.Time
+	tlt := time.Time(*t)
+	if tlt.UnixNano() == zeroTime.UnixNano() {
+		return nil, nil
+	}
+
+	return tlt, nil
+}
+
+func (t *Time) Scan(v interface{}) error {
+	if value, ok := v.(time.Time); ok {
+		*t = Time(value)
+		return nil
+	}
+
+	return fmt.Errorf("can not convert %v to timestamp", v)
+}
+
+func TimePtr(t time.Time) *Time {
+	tlt := Time(t)
+	return &tlt
+}
 
 type GormZapLoggerOption struct {
 	// Slow SQL threshold

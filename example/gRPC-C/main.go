@@ -55,7 +55,7 @@ func direct() {
 
 func gRPCDirect() {
 	clientV3, err := clientv3.New(clientv3.Config{
-		Endpoints: []string{"110.42.184.124:2479"},
+		Endpoints: []string{"127.0.0.1:2379"},
 	})
 	if err != nil {
 		log.Fatal(err)

@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
 	"github.com/source-build/go-fit"
 	"github.com/source-build/go-fit/flog"
 	"gorm.io/gorm"
@@ -12,7 +10,7 @@ import (
 
 type User struct {
 	fit.Model
-	LoginTime *fit.Time `json:"login_time" gorm:"type:datetime"`
+	UseTime *fit.Time `json:"use_time" gorm:"type:datetime"`
 }
 
 func main() {
@@ -61,8 +59,8 @@ func main() {
 		Username: "root",
 		Password: "12345678",
 		Protocol: "tcp",
-		Address:  "110.42.184.124:3326",
-		DbName:   "testa",
+		Address:  "127.0.0.1:3326",
+		DbName:   "test",
 		// 自定义DSN参数，默认使用 charset=utf8&parseTime=True&loc=Local
 		Params: nil,
 		// 不使用连接池，默认启用
@@ -81,18 +79,8 @@ func main() {
 	}
 
 	//fit.InjectMySQLClient()
-
 	//fit.DB
-
 	//fit.DB.AutoMigrate(&User{})
 
 	//fit.DB.Create(&User{})
-	//fit.DB.Model(&User{}).Where("id = 1").Update("LandlordId", 1)
-
-	// Marshal
-	var user User
-	fit.DB.Take(&user, 10)
-
-	marshal, _ := json.Marshal(&user)
-	fmt.Println("结果", string(marshal))
 }

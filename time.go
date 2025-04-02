@@ -1,34 +1,8 @@
 package fit
 
 import (
-	"encoding/json"
 	"time"
 )
-
-// Time Suitable for time types in the format "yyyy-mm-dd_hh-mm-ss."
-type Time time.Time
-
-func (c *Time) Time() time.Time {
-	return time.Time(*c)
-}
-
-func (c *Time) StdTime(t time.Time) {
-	*c = Time(t)
-}
-
-func (c *Time) MarshalJSON() ([]byte, error) {
-	t := time.Time(*c)
-	return json.Marshal(t.Format("2006-01-02 15:04:05"))
-}
-
-func (c *Time) UnmarshalJSON(b []byte) error {
-	t, err := time.Parse(`"2006-01-02 15:04:05"`, string(b))
-	if err != nil {
-		return err
-	}
-	*c = Time(t)
-	return nil
-}
 
 // BeforeDawnTimeDifference Time difference between now and 00:00 am tomorrow
 func BeforeDawnTimeDifference() time.Duration {
