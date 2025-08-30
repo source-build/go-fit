@@ -15,7 +15,7 @@ func (b *etcdBuilder) Build(target resolver.Target, cc resolver.ClientConn, _ re
 	r := &etcdResolver{
 		client:  b.Client,
 		cc:      cc,
-		fullKey: path.Join(rpcClientConf.GetNamespace(), "rpc", target.URL.Host),
+		fullKey: path.Join(rpcClientConf.GetNamespace(), "services", "rpc", target.URL.Host),
 	}
 
 	r.newAddress()
