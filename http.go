@@ -62,6 +62,68 @@ func (r *HttpUtil) POST(url string, v H, contentType ...string) *HttpUtil {
 	return r
 }
 
+func (r *HttpUtil) PUT(url string, v H, contentType ...string) *HttpUtil {
+	ct := "application/json;charset=utf-8"
+	if len(contentType) > 0 {
+		ct = contentType[0]
+	}
+
+	request, err := http.NewRequest("PUT", url, bytes.NewBuffer([]byte(v.ToString())))
+	if err != nil {
+		r.Err = err
+		return r
+	}
+
+	request.Header.Add("Content-Type", ct)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		r.Err = err
+		return r
+	}
+	r.response = response
+	return r
+}
+
+func (r *HttpUtil) DELETE(url string, v H, contentType ...string) *HttpUtil {
+	ct := "application/json;charset=utf-8"
+	if len(contentType) > 0 {
+		ct = contentType[0]
+	}
+	request, err := http.NewRequest("DELETE", url, bytes.NewBuffer([]byte(v.ToString())))
+	if err != nil {
+		r.Err = err
+		return r
+	}
+	request.Header.Add("Content-Type", ct)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		r.Err = err
+		return r
+	}
+	r.response = response
+	return r
+}
+
+func (r *HttpUtil) PATCH(url string, v H, contentType ...string) *HttpUtil {
+	ct := "application/json;charset=utf-8"
+	if len(contentType) > 0 {
+		ct = contentType[0]
+	}
+	request, err := http.NewRequest("PATCH", url, bytes.NewBuffer([]byte(v.ToString())))
+	if err != nil {
+		r.Err = err
+		return r
+	}
+	request.Header.Add("Content-Type", ct)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		r.Err = err
+		return r
+	}
+	r.response = response
+	return r
+}
+
 func (r *HttpUtil) NewRequest(method string, url string, body string, header ...H) *HttpUtil {
 	request, err := http.NewRequest(method, url, strings.NewReader(body))
 	if len(header) > 0 {
@@ -75,6 +137,7 @@ func (r *HttpUtil) NewRequest(method string, url string, body string, header ...
 		r.Err = err
 		return r
 	}
+
 	r.response = response
 
 	return r
@@ -87,6 +150,8 @@ func (r *HttpUtil) Body() ([]byte, error) {
 		}
 		return nil, errors.New("the response does not exist")
 	}
+
+	defer r.response.Body.Close()
 
 	body, err := io.ReadAll(r.response.Body)
 	if err != nil {

@@ -217,8 +217,8 @@ func (r *RegisterService) register() error {
 
 	r.leaseId = resp.ID
 
-	// "<Namespace>/<ServiceType>/<Key>/<LeaseId>"
-	r.fullKey = path.Join(r.opt.Namespace, r.opt.ServiceType, r.opt.Key, strconv.FormatInt(int64(r.leaseId), 10))
+	// "<Namespace>/services/<ServiceType>/<Key>/<LeaseId>"
+	r.fullKey = path.Join(r.opt.Namespace, "services", r.opt.ServiceType, r.opt.Key, strconv.FormatInt(int64(r.leaseId), 10))
 
 	value := RegisterValue{
 		Timestamp: time.Now().Unix(),
