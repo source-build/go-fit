@@ -2,9 +2,10 @@ package main
 
 import (
 	"context"
-	"github.com/go-redis/redis/v8"
-	"github.com/source-build/go-fit"
 	"log"
+
+	"github.com/redis/go-redis/v9"
+	"github.com/source-build/go-fit"
 )
 
 // 单机版
@@ -36,7 +37,7 @@ func standAloneConfig() {
 
 	defer fit.CloseRedis()
 
-	fit.RDB.Get(context.Background(), "foo").Result()
+	fit.RDB.Get(context.Background(), "").Result()
 }
 
 // 集群
@@ -45,15 +46,13 @@ func cluster() {
 	addrs := []string{"127.0.0.1:7000", "127.0.0.1:7001", "127.0.0.1:7002", "127.0.0.1:7006", "127.0.0.1:7004", "127.0.0.1:7005"}
 	username := ""
 	password := ""
-
 	err := fit.NewRedisDefaultClusterClient(addrs, username, password)
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	defer fit.CloseRedis()
 
-	fit.RCDB.Get(context.Background(), "foo").Result()
+	fit.RDB.Get(context.Background(), "foo").Result()
 }
 
 // 集群
@@ -61,9 +60,7 @@ func cluster() {
 func clusterConfig() {
 	addrs := []string{"127.0.0.1:7000", "127.0.0.1:7001", "127.0.0.1:7002", "127.0.0.1:7006", "127.0.0.1:7004", "127.0.0.1:7005"}
 
-	opt := redis.ClusterOptions{
-		Addrs: addrs,
-	}
+	opt := redis.ClusterOptions{Addrs: addrs}
 	err := fit.NewRedisClusterClient(opt)
 	if err != nil {
 		log.Fatal(err)
@@ -71,7 +68,7 @@ func clusterConfig() {
 
 	defer fit.CloseRedis()
 
-	fit.RCDB.Get(context.Background(), "foo").Result()
+	fit.RDB.Get(context.Background(), "foo").Result()
 }
 
 func main() {
@@ -89,6 +86,4 @@ func main() {
 
 	// 自定义配置连接到redis服务器
 	//clusterConfig()
-
-	// 使用 fit.RCDB 访问 *redis.ClusterClient
 }

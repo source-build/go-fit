@@ -2,9 +2,10 @@ package fit
 
 import (
 	"encoding/json"
-	"github.com/mitchellh/mapstructure"
 	"log"
 	"reflect"
+
+	"github.com/mitchellh/mapstructure"
 )
 
 // H container for map of strings to interface{}

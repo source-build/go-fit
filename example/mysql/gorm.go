@@ -1,11 +1,12 @@
 package main
 
 import (
+	"log"
+	"time"
+
 	"github.com/source-build/go-fit"
 	"github.com/source-build/go-fit/flog"
 	"gorm.io/gorm"
-	"log"
-	"time"
 )
 
 type User struct {
@@ -57,10 +58,10 @@ func main() {
 	// 初始化mysql
 	err := fit.NewMySQLDefaultClient(fit.MySQLClientOption{
 		Username: "root",
-		Password: "12345678",
+		Password: "123456",
 		Protocol: "tcp",
 		Address:  "127.0.0.1:3306",
-		DbName:   "test",
+		DbName:   "user",
 		// 自定义DSN参数，默认使用 charset=utf8&parseTime=True&loc=Local
 		Params: nil,
 		// 不使用连接池，默认启用

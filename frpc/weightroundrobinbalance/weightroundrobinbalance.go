@@ -1,19 +1,20 @@
 package weightroundrobinbalance
 
 import (
+	"sync"
+
 	"google.golang.org/grpc/balancer"
 	"google.golang.org/grpc/balancer/base"
-	"sync"
 )
 
 const Name = "weight_round_robin_balance"
 
-func newBuilder() balancer.Builder {
-	return base.NewBalancerBuilder(Name, &rrPickerBuilder{}, base.Config{HealthCheck: true})
-}
-
 func init() {
 	balancer.Register(newBuilder())
+}
+
+func newBuilder() balancer.Builder {
+	return base.NewBalancerBuilder(Name, &rrPickerBuilder{}, base.Config{HealthCheck: true})
 }
 
 type rrPickerBuilder struct{}
@@ -70,6 +71,10 @@ func (p *rrPicker) Pick(balancer.PickInfo) (balancer.PickResult, error) {
 		if best == nil || ws.Current > best.Current {
 			best = ws
 		}
+	}
+
+	if best == nil {
+		return balancer.PickResult{}, balancer.ErrNoSubConnAvailable
 	}
 
 	best.Current -= total

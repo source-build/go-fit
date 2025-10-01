@@ -12,10 +12,12 @@
 *.out
 
 # os system file
-.DS_Store
+*.DS_Store
 
+k
 .idea
 pb
 protoc
 logs
 keys
+backup

@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
-	"github.com/avast/retry-go/v4"
 	"io"
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/avast/retry-go/v4"
 )
 
 func main() {

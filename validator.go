@@ -2,6 +2,7 @@ package fit
 
 import (
 	"errors"
+
 	"github.com/go-playground/locales/en"
 	"github.com/go-playground/locales/zh"
 	ut "github.com/go-playground/universal-translator"

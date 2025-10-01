@@ -1,8 +1,9 @@
 package main
 
 import (
-	"github.com/source-build/go-fit"
 	"log"
+
+	"github.com/source-build/go-fit"
 )
 
 func main() {

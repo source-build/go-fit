@@ -135,7 +135,7 @@ func New(opt Options) *Logger {
 	opts = append(opts, zap.AddCaller())
 
 	if opt.CallerSkip > 0 {
-		opts = append(opts, zap.AddCallerSkip(0))
+		opts = append(opts, zap.AddCallerSkip(opt.CallerSkip))
 	} else {
 		opts = append(opts, zap.AddCallerSkip(2))
 	}

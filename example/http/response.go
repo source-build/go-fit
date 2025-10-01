@@ -49,7 +49,9 @@ func internalLogic() (any, error) {
 	// 返回结果参数
 	// fres.InternalErrRespResult(10026, fres.StatusCodeDesc(10026), fit.H{})
 	// 快捷返回结果
-	//fres.InternalErrRespStatusCode(10026)
+	// fres.InternalErrRespStatusCode(10026)
+	// 快捷返回结果,包含result字段
+	// fres.InternalErrRespStatusCode(10026,fit.H{})
 }
 
 // 客户端错误，对应http状态码 400

@@ -3,8 +3,9 @@ package fit
 import (
 	"context"
 	"errors"
-	"golang.org/x/sync/singleflight"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 )
 
 type Single struct {

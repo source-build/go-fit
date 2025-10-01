@@ -1,20 +1,21 @@
 package randombalance
 
 import (
-	"google.golang.org/grpc/balancer"
-	"google.golang.org/grpc/balancer/base"
 	"math/rand"
 	"sync"
+
+	"google.golang.org/grpc/balancer"
+	"google.golang.org/grpc/balancer/base"
 )
 
 const Name = "random_balance"
 
-func newBuilder() balancer.Builder {
-	return base.NewBalancerBuilder(Name, &rrPickerBuilder{}, base.Config{HealthCheck: true})
-}
-
 func init() {
 	balancer.Register(newBuilder())
+}
+
+func newBuilder() balancer.Builder {
+	return base.NewBalancerBuilder(Name, &rrPickerBuilder{}, base.Config{HealthCheck: true})
 }
 
 type rrPickerBuilder struct{}

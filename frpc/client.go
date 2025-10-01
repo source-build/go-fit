@@ -1,51 +1,47 @@
 package frpc
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"github.com/source-build/go-fit/frpc/randombalance"
-	"github.com/source-build/go-fit/frpc/weightroundrobinbalance"
+	"strings"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/balancer/roundrobin"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"time"
 )
 
 type dialOptions struct {
 	gOpts        []grpc.DialOption
-	ctx          context.Context
 	isDisableTLS bool
-	cancel       context.CancelFunc
-	isBlock      bool
-	scheme       string // default etcd
+	scheme       string
 }
 
-type DialOption interface {
+type DialOptions interface {
 	apply(*dialOptions)
+	identifier() string
 }
 
-// funcDialOption wraps a function that modifies dialOptions into an
+// wraps a function that modifies dialOptions into an
 // implementation of the DialOption interface.
-type funcDialOption struct {
-	f func(*dialOptions)
+type identifiableDialOption struct {
+	fn func(*dialOptions)
+	id string
 }
 
-func (fdo *funcDialOption) apply(do *dialOptions) {
-	fdo.f(do)
+func (i *identifiableDialOption) apply(do *dialOptions) {
+	i.fn(do)
 }
 
-func newFuncDialOption(f func(*dialOptions)) *funcDialOption {
-	return &funcDialOption{
-		f: f,
-	}
+func (i *identifiableDialOption) identifier() string {
+	return i.id
 }
 
-// Return a default option, where the grpc load balancer defaults to polling mode
+// Return a default option, where the grpc load balancer defaults to round robin mode
 func defaultDialOptions() dialOptions {
 	return dialOptions{
 		scheme: EtcdScheme,
+		gOpts:  []grpc.DialOption{grpc.WithDefaultServiceConfig(fmt.Sprintf(`{"loadBalancingPolicy":"%s"}`, roundrobin.Name))},
 	}
 }
 
@@ -53,47 +49,78 @@ var rpcClientConf RpcClientConf
 
 func Init(opt RpcClientConf) error {
 	rpcClientConf = opt
-	registerResolver(rpcClientConf)
+	registerEtcdResolver(rpcClientConf)
+
+	poolConfig := PoolConfig{}
+
+	// 如果用户提供了自定义配置，使用用户配置
+	if opt.PoolConfig != nil {
+		poolConfig = *opt.PoolConfig
+	}
+
+	InitPool(poolConfig)
+
 	return nil
 }
 
-func NewClient(target string, opts ...DialOption) (conn *grpc.ClientConn, err error) {
-	option := defaultDialOptions()
-	for _, o := range opts {
-		o.apply(&option)
+func NewClient(target string, opts ...DialOptions) (poolConn *PooledConn, err error) {
+	var builder strings.Builder
+	builder.WriteString(target)
+	if len(opts) > 0 {
+		builder.WriteString(":")
+
+		for i, o := range opts {
+			builder.WriteString(o.identifier())
+			if i+1 < len(opts) {
+				builder.WriteString(",")
+			}
+		}
 	}
 
-	if rpcClientConf.TLSType == TLSTypeOneWay {
-		if err = option.tlsOneWayHandler(); err != nil {
+	connId := builder.String()
+
+	createFunc := func() (*grpc.ClientConn, error) {
+		option := defaultDialOptions()
+		for _, o := range opts {
+			o.apply(&option)
+		}
+
+		if err = option.authHandler(); err != nil {
 			return nil, err
 		}
-	}
 
-	if rpcClientConf.TLSType == TLSTypeMTLS {
-		if err = option.mTLSHandler(); err != nil {
+		if err = option.checkScheme(); err != nil {
 			return nil, err
 		}
+
+		return grpc.NewClient(option.target(target), option.gOpts...)
 	}
 
-	if err = option.checkScheme(); err != nil {
-		return nil, err
-	}
-
-	target = option.buildTarget(target)
-
-	ctx := context.Background()
-
-	if option.cancel != nil {
-		defer option.cancel()
-		if option.isBlock {
-			ctx = option.ctx
-		}
-	}
-
-	return grpc.DialContext(ctx, target, option.gOpts...)
+	return GetOrCreatePoolConnection(connId, createFunc)
 }
 
-func (d *dialOptions) buildTarget(target string) string {
+func (d *dialOptions) authHandler() error {
+	// Set transport layer credentials
+	transportCred, err := rpcClientConf.clientTransportCredentials()
+	if err != nil {
+		return fmt.Errorf("failed to setup transport credentials: %w", err)
+	}
+
+	d.gOpts = append(d.gOpts, transportCred)
+
+	// If Token authentication is configured, add Per RPC credentials (optional)
+	if rpcClientConf.hasToken() {
+		tokenCred, err := rpcClientConf.clientToken()
+		if err != nil {
+			return fmt.Errorf("failed to setup token credentials: %w", err)
+		}
+		d.gOpts = append(d.gOpts, tokenCred)
+	}
+
+	return nil
+}
+
+func (d *dialOptions) target(target string) string {
 	if d.scheme == EtcdScheme {
 		return BuildEtcdTarget(target)
 	}
@@ -109,101 +136,18 @@ func (d *dialOptions) checkScheme() error {
 	return nil
 }
 
-func (d *dialOptions) tlsOneWayHandler() error {
-	if d.isDisableTLS {
-		return nil
-	}
-
-	tls, err := rpcClientConf.clientTLS()
-	if err != nil {
-		return err
-	}
-
-	d.gOpts = append(d.gOpts, tls)
-
-	return nil
-}
-
-func (d *dialOptions) mTLSHandler() error {
-	if d.isDisableTLS {
-		return nil
-	}
-
-	tls, err := rpcClientConf.clientmTLS()
-	if err != nil {
-		return err
-	}
-
-	d.gOpts = append(d.gOpts, tls)
-
-	return nil
-}
-
-// WithBalancerRandom Using a load balancer with random load balancing
-func WithBalancerRandom(opt ...grpc.DialOption) DialOption {
-	return newFuncDialOption(func(o *dialOptions) {
-		o.gOpts = append(o.gOpts, grpc.WithDefaultServiceConfig(fmt.Sprintf(`{"loadBalancingPolicy":"%s"}`, randombalance.Name)))
-	})
-}
-
-// WithBalancerRoundRobin defines a roundRobin balancer. roundRobin balancer is
-func WithBalancerRoundRobin(opt ...grpc.DialOption) DialOption {
-	return newFuncDialOption(func(o *dialOptions) {
-		o.gOpts = append(o.gOpts, grpc.WithDefaultServiceConfig(fmt.Sprintf(`{"loadBalancingPolicy":"%s"}`, roundrobin.Name)))
-	})
-}
-
-// WithBalancerWeightRoundRobin Using weighted polling scheme as load balancing
-func WithBalancerWeightRoundRobin(opt ...grpc.DialOption) DialOption {
-	return newFuncDialOption(func(o *dialOptions) {
-		o.gOpts = append(o.gOpts, grpc.WithDefaultServiceConfig(fmt.Sprintf(`{"loadBalancingPolicy":"%s"}`, weightroundrobinbalance.Name)))
-	})
-}
-
 // WithGrpcOption receive grpc.DialOption
-func WithGrpcOption(opt ...grpc.DialOption) DialOption {
-	return newFuncDialOption(func(o *dialOptions) {
-		o.gOpts = append(o.gOpts, opt...)
-	})
-}
-
-// WithBlock returns a DialOption which makes callers of Dial block until the underlying connection is up. Without this, Dial returns immediately and connecting the server happens in background.
-func WithBlock() DialOption {
-	return newFuncDialOption(func(o *dialOptions) {
-		o.isBlock = true
-		o.gOpts = append(o.gOpts, grpc.WithBlock())
-	})
-}
-
-func DisableTLS() DialOption {
-	return newFuncDialOption(func(o *dialOptions) {
-		o.isDisableTLS = true
-	})
-}
-
-func WithCtx(ctx context.Context) DialOption {
-	return newFuncDialOption(func(o *dialOptions) {
-		o.ctx = ctx
-	})
-}
-
-// WithTimeoutCtx Set a timeout context and receive a parameter with a default timeout of 10 seconds.
-// This setting is only effective when WithBlock is used.
-func WithTimeoutCtx(t ...time.Duration) DialOption {
-	return newFuncDialOption(func(o *dialOptions) {
-		var timeout time.Duration
-		if len(t) > 0 {
-			timeout = t[0]
-		} else {
-			timeout = time.Second * 10
-		}
-
-		o.ctx, o.cancel = context.WithTimeout(context.Background(), timeout)
-	})
+func WithGrpcOption(opts ...grpc.DialOption) DialOptions {
+	return &identifiableDialOption{
+		fn: func(o *dialOptions) {
+			o.gOpts = append(o.gOpts, opts...)
+		},
+		id: fmt.Sprintf("g_opt:%d", len(opts)),
+	}
 }
 
 func NewDirectClient(target string, opts ...grpc.DialOption) (conn *grpc.ClientConn, err error) {
-	return grpc.DialContext(context.Background(), target, opts...)
+	return grpc.NewClient(target, opts...)
 }
 
 // IsNotFoundServiceErr Determine if the error is due to the lack of available services

@@ -2,8 +2,9 @@ package fres
 
 import (
 	"errors"
-	"github.com/gin-gonic/gin"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
 )
 
 type ResponseOK struct {
@@ -13,7 +14,6 @@ type ResponseOK struct {
 }
 
 type ResponseErr struct {
-	// 0:client err 1:internal err
 	Type   int    `json:"-"`
 	Code   int    `json:"code"`
 	ErrMsg string `json:"err_msg"`
@@ -43,6 +43,16 @@ func InternalErrResp(code int, msg string, err ...error) (ResponseErr, error) {
 
 func InternalErrRespStatusCode(code int, err ...error) (ResponseErr, error) {
 	r := ResponseErr{Code: code, ErrMsg: StatusCodeDesc(code), Type: 1}
+
+	if len(err) > 0 {
+		return r, err[0]
+	}
+
+	return r, nil
+}
+
+func InternalErrRespResultStatusCode(code int, result any, err ...error) (ResponseErr, error) {
+	r := ResponseErr{Code: code, ErrMsg: StatusCodeDesc(code), Type: 1, Result: result}
 
 	if len(err) > 0 {
 		return r, err[0]
