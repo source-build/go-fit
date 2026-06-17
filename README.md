@@ -49,7 +49,7 @@
 ### 🛠️ 开发效率工具
 - **结构化日志**：基于zap的高性能日志系统，支持日志轮转、多输出
 - **HTTP响应规范**：统一的API响应格式，支持全局状态码管理
-- **数据库集成**：MySQL(GORM)、Redis客户端，开箱即用
+- **数据库集成**：MySQL、PostgreSQL(GORM)、Redis客户端，开箱即用
 - **参数校验**：Web请求参数自动校验，支持国际化错误信息
 
 ### 🔧 实用工具集
@@ -76,6 +76,7 @@
 - [http 统一规范](#http 统一规范)
 - [redis](#redis)
 - [mysql](#mysql)
+- [postgresql](#postgresql)
 - [etcd](#etcd)
 - [rabbitMQ](#rabbitMQ)
 - [字符串操作](#字符串操作)
@@ -1643,6 +1644,99 @@ return
 }
 
 fmt.Println(tx.RowsAffected) // 0 
+```
+
+# postgresql
+
+> 基于 [gorm](https://github.com/go-gorm/gorm)（底层驱动为 [pgx](https://github.com/jackc/pgx)）
+>
+> 版本：gorm v1.31.0 / gorm.io/driver/postgres v1.6.0
+
+方便快速的使用postgresql客户端，接口风格与 mysql 保持一致。
+
+**值得一提**
+
+- ✅ 结合zap日志输出；
+- ✅ 判断查询错误结果是否是RecordNotFoundError；
+- ✅ 提供 fit.Model 结构体,相同于gorm.Model,为其增加了json格式；
+- ✅ 初始化时直接返回连接关闭函数，便于优雅释放。
+
+### 初始化
+
+```go
+// 初始化一个日志实例，以便将postgresql日志输出至此。
+opt := flog.Options{
+// 建议使用 Info Warn Error 这三个日志级别。
+LogLevel:         flog.InfoLevel,
+EncoderConfigType: flog.ProductionEncoderConfig,
+// 控制台输出
+Console:           false,
+// 文件输出，为空表示不输出到文件
+Filename: "logs/postgresql.log",
+}
+gormLogger := flog.NewGormLogger(opt)
+
+// gorm.Config 配置
+gormConfig := &gorm.Config{
+// gorm 自定义日志配置 
+// 使用zap作为自定义日志
+// 自定义Logger，参考：https://github.com/go-gorm/gorm/blob/master/logger/logger.go
+Logger: fit.NewGormZapLogger(gormLogger, fit.GormZapLoggerOption{
+// 慢SQL阀值，默认200ms
+SlowThreshold: 500 * time.Millisecond,
+// 忽略 record not found 错误
+IgnoreRecordNotFoundError: true,
+// 禁用彩色输出
+DisableColorful: false,
+}),
+}
+
+// 该方法仅传入必要的参数，其他配置使用默认值。
+// 返回值顺序为 (关闭函数, error)，error 在最后；调用关闭函数即可释放连接。
+closePg, err := fit.NewPostgreSQLDefaultClient(fit.PostgreSQLClientOption{
+Username: "postgres",
+Password: "12345678",
+Host:     "127.0.0.1",
+Port:     "5432", // 默认 5432
+DbName:   "geo",
+// 自定义DSN参数，默认使用 sslmode=disable&TimeZone=Asia/Shanghai
+Params: nil,
+// 不使用连接池，默认启用
+DisableConnPool: false,
+// 设置空闲连接的最大数量，默认10
+MaxIdleConns: 0,
+// 设置打开连接的最大数量，默认100
+MaxOpenConns: 0,
+// 设置连接的最大存活时间，默认1h
+ConnMaxLifetime: 0,
+// 设置空闲连接的最大存活时间，默认30m
+ConnMaxIdleTime: 0,
+// gorm 配置
+Config: gormConfig,
+})
+if err != nil {
+log.Fatal(err)
+}
+defer closePg() // 优雅关闭连接
+
+// 该方法接收一个 *gorm.DB 类型，自定义完成初始化后将其传入。
+fit.InjectPostgreSQLClient()
+```
+
+### 使用
+
+```go
+// 使用 fit.PG 访问
+fit.PG
+```
+
+### 关闭
+
+```go
+// 除了使用初始化时返回的关闭函数，也可直接调用：
+if err := fit.ClosePostgreSQLClient(); err != nil {
+log.Fatal(err)
+}
 ```
 
 # etcd

@@ -316,6 +316,15 @@ func NewMySQLDefaultClient(opt MySQLClientOption) error {
 	return nil
 }
 
+// CloseMySQLClient Close MySQL client
+func CloseMySQLClient() error {
+	sqlDb, err := DB.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDb.Close()
+}
+
 func InjectMySQLClient(db *gorm.DB) {
 	DB = db
 }
@@ -323,10 +332,10 @@ func InjectMySQLClient(db *gorm.DB) {
 // Model Encapsulated Gorm Model, Mainly added JSON format,
 // if there is no such requirement, you can directly use Gorm Model
 type Model struct {
-	ID        uint           `gorm:"primarykey" json:"id"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at"`
+	ID        uint           `gorm:"primarykey" json:"id,omitempty"`
+	CreatedAt time.Time      `json:"created_at,omitempty"`
+	UpdatedAt time.Time      `json:"updated_at,omitempty"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 func HandleGormQueryErrorFromTx(tx *gorm.DB) (*gorm.DB, error) {
