@@ -130,6 +130,12 @@ type RpcClientConf struct {
 	// CAFile path to the Certificate Authority file (PEM format).
 	// Required for TransportTypeMTLS to verify the server's certificate.
 	CAFile string
+
+	// EnableTrace enables OpenTelemetry gRPC client tracing.
+	// When true, all gRPC calls will automatically create client spans
+	// and propagate trace context to downstream services.
+	// Default is false to avoid affecting existing services.
+	EnableTrace bool
 }
 
 // GetNamespace returns the configured namespace, defaulting to "default" if empty.

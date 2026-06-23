@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/balancer/roundrobin"
 	"google.golang.org/grpc/codes"
@@ -39,9 +40,16 @@ func (i *identifiableDialOption) identifier() string {
 
 // Return a default option, where the grpc load balancer defaults to round robin mode
 func defaultDialOptions() dialOptions {
+	gOpts := []grpc.DialOption{grpc.WithDefaultServiceConfig(fmt.Sprintf(`{"loadBalancingPolicy":"%s"}`, roundrobin.Name))}
+
+	// Add otelgrpc StatsHandler if tracing is enabled
+	if rpcClientConf.EnableTrace {
+		gOpts = append(gOpts, grpc.WithStatsHandler(otelgrpc.NewClientHandler()))
+	}
+
 	return dialOptions{
 		scheme: EtcdScheme,
-		gOpts:  []grpc.DialOption{grpc.WithDefaultServiceConfig(fmt.Sprintf(`{"loadBalancingPolicy":"%s"}`, roundrobin.Name))},
+		gOpts:  gOpts,
 	}
 }
 
@@ -53,7 +61,6 @@ func Init(opt RpcClientConf) error {
 
 	poolConfig := PoolConfig{}
 
-	// 如果用户提供了自定义配置，使用用户配置
 	if opt.PoolConfig != nil {
 		poolConfig = *opt.PoolConfig
 	}

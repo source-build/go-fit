@@ -431,6 +431,7 @@ logger.Error("服务注册失败")
 - [快速开始](#快速开始)
 - [连接池配置](#连接池配置)
 - [安全配置](#安全配置)
+- [链路追踪](#链路追踪)
 - [性能调优](#性能调优)
 - [最佳实践](#最佳实践)
 
@@ -850,6 +851,33 @@ TokenCredentials: &TokenAuth{Token: "your-jwt-token"},
 // ... 其他 TLS 配置
 })
 ```
+
+## 链路追踪
+
+### 5. OpenTelemetry gRPC 客户端追踪（可选，默认关闭）
+
+设置 `EnableTrace: true` 后，所有通过 `frpc.NewClient()` 创建的 gRPC 连接会自动注入 OpenTelemetry StatsHandler，实现：
+
+- 自动创建 gRPC client span
+- 自动将 trace context 传播到下游 gRPC 服务
+- 下游服务的 otelgrpc server handler 自动接收父 span
+
+```go
+err := frpc.Init(frpc.RpcClientConf{
+    EtcdClient:    etcdClient,
+    Namespace:     "production",
+    TransportType: frpc.TransportTypeMTLS,
+    CertFile:      "client.crt",
+    KeyFile:       "client.key",
+    CAFile:        "ca.crt",
+    EnableTrace:   true, // Enable gRPC tracing, default false
+})
+```
+
+**注意事项**：
+- `EnableTrace` 默认为 `false`
+- 启用后需要确保 `tracing.Init()` 已在应用启动时调用
+- 需要确保传入正确的 `context.Context`（如 `c.Request.Context()`），否则即使启用了 trace 也不会产生 span
 
 ## 性能调优
 
