@@ -1388,6 +1388,48 @@ fres.InternalErrRespStatusCode(10026) // {code:10026,err_msg:"服务异常"}
 fres.InternalErrRespStatusCode(10026,fit.H{}) // {code:10026,err_msg:"服务异常",result:{}}
 ```
 
+**链路追踪(OpenTelemetry)**
+
+`ResponseOtel` / `ErrJsonOtel` 是 `Response` / `ErrJson` 的 OpenTelemetry 增强版：在写出错误响应前，自动把业务错误信息和底层 `err` 记录到当前 OTel span 上。这样在 Jaeger 等链路追踪平台里能直接看到错误根因，不必再翻日志对照 trace_id。
+
+> 前提：请求链路上已存在 recording 的 span（例如使用了 `otelgin.Middleware`）。无 span 时为空操作，零开销。
+
+错误请求的 span 上会附加以下信息：
+
+| 字段 | 说明 |
+|---|---|
+| `otel.status` = ERROR | span 状态置为错误 |
+| `otel.status_description` | `err.Error()`，底层错误信息 |
+| `exception` 事件 | `span.RecordError(err)` 记录的异常事件 |
+| `http.response.status_code` | 400 / 500 |
+| `biz.code` | 业务状态码 |
+| `biz.err_msg` | 业务错误描述（取自规范字段 `ErrMsg`） |
+
+```go
+// 主力用法：err != nil 时自动把业务错误信息与底层 err 记录到 span，成功则不记
+resp, err := QueryUserInfoLogic()
+fres.ResponseOtel(c, resp, err)
+
+// 直接返回错误的场景（如参数校验），需手动传入底层 err
+fres.ErrJsonOtel(c, fres.ResponseErr{
+    Code: fres.StatusClientErr, ErrMsg: "参数错误:" + err.Error(),
+}, err)
+```
+
+开关控制：
+
+```go
+// 全局关闭（整个项目不再记录，例如未接入 OTel 时）
+fres.SetOtelEnabled(false)
+fres.IsOtelEnabled() // 查询当前状态
+
+// 单次跳过（敏感或高频噪声接口）
+fres.ResponseOtel(c, resp, err, fres.WithoutOtel())
+
+// 全局已关闭，但本接口仍想强制记录
+fres.ResponseOtel(c, resp, err, fres.WithOtel())
+```
+
 # redis
 
 > 基于 [go-redis](https://github.com/redis/go-redis) 
