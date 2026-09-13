@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/source-build/go-fit/flog"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -33,6 +34,12 @@ type GormZapLoggerOption struct {
 	// CallerPathDepth controls how many trailing path segments are kept in GORM log callers.
 	// 0 keeps the original full path; 1 keeps only the file name; 2 keeps the parent directory and file name.
 	CallerPathDepth int
+
+	// Structured writes GORM query details as Zap fields instead of formatting them into msg.
+	Structured bool
+
+	// ParameterizedQueries omits bind values from the logged SQL statement.
+	ParameterizedQueries bool
 }
 
 type GormZapLogger struct {
@@ -45,6 +52,10 @@ type GormZapLogger struct {
 	ignoreRecordNotFoundError bool
 
 	callerPathDepth int
+
+	structured bool
+
+	parameterizedQueries bool
 
 	traceStr string
 
@@ -97,6 +108,9 @@ func NewGormZapLogger(log *flog.Logger, opt ...GormZapLoggerOption) GormZapLogge
 			g.callerPathDepth = opt[0].CallerPathDepth
 		}
 
+		g.structured = opt[0].Structured
+		g.parameterizedQueries = opt[0].ParameterizedQueries
+
 		if !opt[0].DisableColorful {
 			g.traceStr = logger.Green + "%s " + logger.Reset + logger.Yellow + "[%.3fms] " + logger.BlueBold + "[rows:%v]" + logger.Reset + " %s" + "\n"
 			g.traceWarnStr = logger.Green + "%s " + logger.Yellow + "%s " + logger.Reset + logger.RedBold + "[%.3fms] " + logger.Yellow + "[rows:%v]" + logger.Magenta + " %s" + logger.Reset + "\n"
@@ -134,6 +148,13 @@ func (g GormZapLogger) Error(ctx context.Context, s string, i ...interface{}) {
 	g.Logger.Sugar().Errorf(s, i)
 }
 
+func (g GormZapLogger) ParamsFilter(ctx context.Context, sql string, params ...interface{}) (string, []interface{}) {
+	if g.parameterizedQueries {
+		return sql, nil
+	}
+	return sql, params
+}
+
 func trimGormCallerPath(caller string, depth int) string {
 	if depth <= 0 || caller == "" {
 		return caller
@@ -146,12 +167,54 @@ func trimGormCallerPath(caller string, depth int) string {
 	return strings.Join(parts[len(parts)-depth:], "/")
 }
 
+func (g GormZapLogger) traceStructured(caller string, elapsed time.Duration, fc func() (sql string, rowsAffected int64), err error) {
+	durationMS := float64(elapsed.Nanoseconds()) / 1e6
+
+	if err != nil && g.logLevel >= logger.Error && (!errors.Is(err, gorm.ErrRecordNotFound) || !g.ignoreRecordNotFoundError) {
+		sql, rows := fc()
+		g.Logger.Error("gorm query failed",
+			zap.String("source", caller),
+			zap.Float64("duration_ms", durationMS),
+			zap.Int64("rows", rows),
+			zap.String("sql", sql),
+			zap.Error(err),
+		)
+		return
+	}
+
+	if elapsed > g.slowThreshold && g.slowThreshold != 0 && g.logLevel >= logger.Warn {
+		sql, rows := fc()
+		g.Logger.Warn("gorm slow query",
+			zap.String("source", caller),
+			zap.Float64("duration_ms", durationMS),
+			zap.Float64("slow_threshold_ms", float64(g.slowThreshold.Nanoseconds())/1e6),
+			zap.Int64("rows", rows),
+			zap.String("sql", sql),
+		)
+		return
+	}
+
+	if g.logLevel == logger.Info {
+		sql, rows := fc()
+		g.Logger.Info("gorm query",
+			zap.String("source", caller),
+			zap.Float64("duration_ms", durationMS),
+			zap.Int64("rows", rows),
+			zap.String("sql", sql),
+		)
+	}
+}
+
 func (g GormZapLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
 	if g.logLevel <= logger.Silent {
 		return
 	}
 
 	elapsed := time.Since(begin)
+	if g.structured {
+		g.traceStructured(trimGormCallerPath(utils.FileWithLineNum(), g.callerPathDepth), elapsed, fc, err)
+		return
+	}
 
 	// An error occurred
 	if err != nil && g.logLevel >= logger.Error && (!errors.Is(err, gorm.ErrRecordNotFound) || !g.ignoreRecordNotFoundError) {
